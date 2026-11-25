@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -70,6 +70,7 @@ export function TaskDetailView({
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [draftDesc, setDraftDesc] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const { data: me } = useCurrentUser();
   const { data: task, isLoading } = useTaskDetail(taskId);
@@ -230,9 +231,10 @@ export function TaskDetailView({
             {/* ZONA B — Core Execution Area */}
             <section className="space-y-5">
               <div className="space-y-2">
-                <div className="group relative">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-1">
+                  <div className="group flex items-center gap-2">
                     <input
+                      ref={titleInputRef}
                       type="text"
                       disabled={!permissions?.canEditTask}
                       value={draftTitle ?? task.title}
@@ -256,21 +258,31 @@ export function TaskDetailView({
                       }}
                       aria-label="Task title"
                       className={cn(
-                        "w-full rounded-[6px] border border-transparent bg-transparent px-2 -mx-2 py-1 pr-8 text-[20px] font-semibold leading-[28px] tracking-[-0.02em] text-ink-primary transition-precision focus:border-accent focus:bg-subtle focus:outline-none disabled:opacity-90",
+                        "min-w-0 flex-1 rounded-[6px] border border-transparent bg-transparent px-2 -ml-2 py-1 text-[20px] font-semibold leading-[28px] tracking-[-0.02em] text-ink-primary transition-precision focus:border-accent focus:bg-subtle focus:outline-none disabled:opacity-90",
                         permissions?.canEditTask &&
                           "hover:border-hairline hover:bg-subtle/60 cursor-text"
                       )}
                     />
-                    {permissions?.canEditTask && (
-                      <Pencil
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-ink-muted opacity-50 transition-precision group-hover:opacity-100 group-focus-within:opacity-0"
-                        strokeWidth={1.75}
-                      />
+                    {permissions?.canEditTask && draftTitle === null && (
+                      <button
+                        type="button"
+                        aria-label="Edit task title"
+                        title="Edit title"
+                        onClick={() => {
+                          setDraftTitle(task.title);
+                          requestAnimationFrame(() => {
+                            titleInputRef.current?.focus();
+                            titleInputRef.current?.select();
+                          });
+                        }}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-hairline bg-canvas text-ink-muted hover:border-strong hover:bg-subtle hover:text-ink-primary transition-precision focus-ring cursor-pointer"
+                      >
+                        <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      </button>
                     )}
                   </div>
                   {draftTitle !== null && permissions?.canEditTask && (
-                    <p className="mt-1 font-mono text-[10px] text-ink-muted">
+                    <p className="font-mono text-[10px] text-ink-muted">
                       Enter to save · Esc to cancel
                     </p>
                   )}
