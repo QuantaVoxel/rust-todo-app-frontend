@@ -50,7 +50,9 @@ export function TasksWorkspace() {
   const setViewMode = useWorkspaceStore((s) => s.setViewMode);
   const activeTaskId = useWorkspaceStore((s) => s.activeTaskId);
   const setActiveTaskId = useWorkspaceStore((s) => s.setActiveTaskId);
+  const quickCreateOpen = useWorkspaceStore((s) => s.quickCreateOpen);
   const setQuickCreateOpen = useWorkspaceStore((s) => s.setQuickCreateOpen);
+  const commandPaletteOpen = useWorkspaceStore((s) => s.commandPaletteOpen);
 
   // Filter & Pagination State
   const [searchInput, setSearchInput] = useState("");
@@ -105,7 +107,13 @@ export function TasksWorkspace() {
   const { data: tags = [] } = useTagsList();
   useEnumsLookup();
 
-  const { data: taskPage, isLoading, isError, error } = useTasksList(queryParams);
+  const {
+    data: taskPage,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useTasksList(queryParams);
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
 
@@ -147,7 +155,7 @@ export function TasksWorkspace() {
         return;
       }
 
-      if (isEditable) return;
+      if (isEditable || quickCreateOpen || commandPaletteOpen) return;
 
       if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -177,7 +185,14 @@ export function TasksWorkspace() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [tasks, focusedIndex, setActiveTaskId, setQuickCreateOpen]);
+  }, [
+    tasks,
+    focusedIndex,
+    quickCreateOpen,
+    commandPaletteOpen,
+    setActiveTaskId,
+    setQuickCreateOpen,
+  ]);
 
   const handleToggleComplete = (task: TaskResponse) => {
     const completedStatus = statuses.find((s) => s.name === "completed");
@@ -513,6 +528,15 @@ export function TasksWorkspace() {
               <p className="mt-1 text-[13px] text-ink-secondary">
                 {error instanceof Error ? error.message : "Check your connection."}
               </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="mt-4"
+                onClick={() => refetch()}
+              >
+                Retry
+              </Button>
             </div>
           ) : tasks.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center p-8 text-center">
