@@ -9,7 +9,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bell, X } from "lucide-react";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
@@ -44,7 +46,12 @@ export function useRealtime() {
 
 export const notificationKeys = {
   all: ["notifications"] as const,
-  list: (isRead?: boolean) => ["notifications", "list", isRead ?? "all"] as const,
+  list: (isRead?: boolean) =>
+    [
+      "notifications",
+      "list",
+      isRead === undefined ? "all" : isRead ? "read" : "unread",
+    ] as const,
   unreadCount: ["notifications", "unread-count"] as const,
 };
 
@@ -54,9 +61,11 @@ const ASSET_BASE_URL =
   process.env.NEXT_PUBLIC_ASSET_BASE_URL ?? "http://localhost:8080";
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const shouldReduceMotion = useReducedMotion();
   const [status, setStatus] = useState<RealtimeStatus>("connecting");
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [toast, setToast] = useState<ToastItem | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -64,23 +73,30 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountedRef = useRef(false);
 
   const pushToast = useCallback((message: string, type: string) => {
-    const id = Date.now() + Math.floor(Math.random() * 1000);
-    setToasts((prev) => [...prev.slice(-2), { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    const id = Date.now();
+    setToast({ id, message, type: type.toLowerCase() });
+    toastTimerRef.current = setTimeout(() => {
+      setToast((curr) => (curr?.id === id ? null : curr));
+    }, 4500);
   }, []);
 
   const handleIncomingNotification = useCallback(
     (payload: RealtimeNotificationEvent) => {
       if (payload.event === "notification.created" && payload.notification_id) {
+        const normalizedType = (
+          payload.notification_type ?? "system"
+        ).toLowerCase();
         const newItem: NotificationResponse = {
           notification_id: payload.notification_id,
           user_id: payload.user_id ?? 0,
-          notification_type: payload.notification_type ?? "system",
+          notification_type: normalizedType,
           message: payload.message ?? "New notification",
           is_read: Boolean(payload.is_read),
           created_at: payload.created_at ?? new Date().toISOString(),
@@ -88,23 +104,38 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
         queryClient.setQueryData<NotificationResponse[]>(
           notificationKeys.list(undefined),
-          (old) => (old ? [newItem, ...old] : [newItem])
+          (old) =>
+            old
+              ? [
+                  newItem,
+                  ...old.filter(
+                    (n) => n.notification_id !== newItem.notification_id
+                  ),
+                ]
+              : [newItem]
         );
         queryClient.setQueryData<NotificationResponse[]>(
           notificationKeys.list(false),
-          (old) => (old ? [newItem, ...old] : [newItem])
+          (old) =>
+            old
+              ? [
+                  newItem,
+                  ...old.filter(
+                    (n) => n.notification_id !== newItem.notification_id
+                  ),
+                ]
+              : [newItem]
         );
         queryClient.setQueryData<UnreadCountResponse>(
           notificationKeys.unreadCount,
           (old) => ({ unread_count: (old?.unread_count ?? 0) + 1 })
         );
 
-        const nType = payload.notification_type?.toLowerCase();
-        if (nType === "share" || nType === "comment") {
+        if (normalizedType === "share" || normalizedType === "comment") {
           queryClient.invalidateQueries({ queryKey: taskKeys.all });
         }
 
-        pushToast(newItem.message, newItem.notification_type);
+        pushToast(newItem.message, normalizedType);
       } else if (
         payload.event === "notification.updated" &&
         payload.notification_id
@@ -114,6 +145,20 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     },
     [queryClient, pushToast]
   );
+
+  // Revalidate lightweight unread count when tab regains visibility
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        queryClient.invalidateQueries({
+          queryKey: notificationKeys.unreadCount,
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [queryClient]);
 
   useEffect(() => {
     unmountedRef.current = false;
@@ -147,6 +192,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         if (unmountedRef.current) return;
         reconnectAttemptRef.current = 0;
         setStatus("sse");
+        queryClient.invalidateQueries({
+          queryKey: notificationKeys.unreadCount,
+        });
       });
 
       es.addEventListener("notification", (evt) => {
@@ -182,6 +230,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         wsFailuresRef.current = 0;
         reconnectAttemptRef.current = 0;
         setStatus("ws");
+        queryClient.invalidateQueries({
+          queryKey: notificationKeys.unreadCount,
+        });
 
         heartbeatTimerRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -263,8 +314,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     return () => {
       unmountedRef.current = true;
       cleanupConnections();
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
     };
-  }, [handleIncomingNotification]);
+  }, [handleIncomingNotification, queryClient]);
 
   const markRead = useCallback(
     async (notificationId: number) => {
@@ -288,38 +342,52 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     <RealtimeContext.Provider value={{ status, markRead }}>
       {children}
 
-      {/* Bottom-Right Subtle Toasts */}
-      {toasts.length > 0 && (
-        <div
-          aria-live="polite"
-          className="fixed bottom-4 right-4 z-50 flex w-full max-w-[360px] flex-col gap-2"
-        >
-          {toasts.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-start justify-between gap-3 rounded-[8px] border border-strong bg-surface px-3.5 py-2.5 text-[13px] text-ink-primary"
+      {/* Single Non-Intrusive Clickable Live Toast */}
+      <AnimatePresence>
+        {toast && (
+          <div
+            aria-live="polite"
+            className="fixed bottom-4 right-4 z-50 w-full max-w-[360px]"
+          >
+            <motion.div
+              key={toast.id}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, y: 8 }}
+              transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
+              onClick={() => {
+                setToast(null);
+                router.push("/notifications");
+              }}
+              className="flex cursor-pointer items-start justify-between gap-3 rounded-[8px] border border-strong bg-surface px-3.5 py-2.5 text-[13px] text-ink-primary hover:border-accent transition-precision"
             >
               <div className="flex items-start gap-2.5">
                 <Bell
                   className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent"
                   strokeWidth={1.75}
                 />
-                <p className="leading-snug">{t.message}</p>
+                <div className="space-y-0.5">
+                  <p className="leading-snug">{toast.message}</p>
+                  <p className="font-mono text-[10px] capitalize text-ink-muted">
+                    {toast.type} · Click to view
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 aria-label="Dismiss notification"
-                onClick={() =>
-                  setToasts((prev) => prev.filter((item) => item.id !== t.id))
-                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToast(null);
+                }}
                 className="rounded-[4px] p-0.5 text-ink-muted hover:text-ink-primary cursor-pointer"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={1.75} />
               </button>
-            </div>
-          ))}
-        </div>
-      )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </RealtimeContext.Provider>
   );
 }
