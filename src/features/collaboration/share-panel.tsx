@@ -20,7 +20,11 @@ import type {
   TaskShareResponse,
   UserSearchResult,
 } from "@/lib/api/types";
-import { taskKeys, useTaskShares } from "@/features/tasks/queries";
+import {
+  taskKeys,
+  useTaskShares,
+  useUserDirectory,
+} from "@/features/tasks/queries";
 
 export function SharePanel({
   taskId,
@@ -30,6 +34,7 @@ export function SharePanel({
   canManage: boolean;
 }) {
   const queryClient = useQueryClient();
+  const userMap = useUserDirectory();
   const [modalOpen, setModalOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -101,14 +106,29 @@ export function SharePanel({
         </p>
       ) : (
         <div className="divide-y divide-hairline rounded-[6px] border border-hairline bg-canvas">
-          {shares.map((s) => (
-            <div
-              key={s.user_id}
-              className="flex items-center justify-between px-3 py-2 text-[12px]"
-            >
-              <span className="font-mono text-ink-primary tabular-nums">
-                {s.username ? `@${s.username}` : `User #${s.user_id}`}
-              </span>
+          {shares.map((s) => {
+            const u = userMap.get(s.user_id);
+            const displayLabel = s.username
+              ? `@${s.username}`
+              : u
+                ? `@${u.username}`
+                : `User #${s.user_id}`;
+            const displayEmail = s.email ?? u?.email;
+            return (
+              <div
+                key={s.user_id}
+                className="flex items-center justify-between px-3 py-2 text-[12px]"
+              >
+                <div className="min-w-0">
+                  <span className="font-medium text-ink-primary">
+                    {displayLabel}
+                  </span>
+                  {displayEmail && (
+                    <span className="ml-2 text-[11px] text-ink-muted">
+                      {displayEmail}
+                    </span>
+                  )}
+                </div>
               <div className="flex items-center gap-2">
                 {canManage ? (
                   <>
@@ -141,7 +161,8 @@ export function SharePanel({
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -1,5 +1,5 @@
-import { LoginForm } from "@/features/auth/auth-forms";
+import { UnifiedAuthView } from "@/features/auth/unified-auth-view";
 
 export default function LoginPage() {
-  return <LoginForm />;
+  return <UnifiedAuthView initialMode="login" />;
 }

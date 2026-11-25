@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Bell, Check, CheckCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +38,7 @@ export function useNotificationsList(isRead?: boolean) {
 export function NotificationBell() {
   const queryClient = useQueryClient();
   const { markRead } = useRealtime();
+  const shouldReduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
 
   const { data: unreadData } = useUnreadCount();
@@ -69,14 +71,23 @@ export function NotificationBell() {
         <button
           type="button"
           aria-label="Notifications"
-          className="relative flex h-8 w-8 items-center justify-center rounded-[6px] border border-hairline bg-surface text-ink-secondary hover:border-strong hover:text-ink-primary transition-precision focus-ring cursor-pointer"
+          className="relative flex h-8 w-8 items-center justify-center rounded-[6px] border border-hairline bg-canvas text-ink-secondary hover:border-strong hover:text-ink-primary transition-precision focus-ring cursor-pointer"
         >
           <Bell className="h-4 w-4" strokeWidth={1.75} />
-          {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-mono text-[10px] font-semibold leading-none text-white tabular-nums">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
+          <AnimatePresence mode="popLayout">
+            {unreadCount > 0 && (
+              <motion.span
+                key={unreadCount}
+                initial={shouldReduceMotion ? false : { scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={shouldReduceMotion ? undefined : { scale: 0.6, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-mono text-[10px] font-semibold leading-none text-white tabular-nums"
+              >
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
       </Popover.Trigger>
 

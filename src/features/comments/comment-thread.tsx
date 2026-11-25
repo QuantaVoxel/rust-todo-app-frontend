@@ -10,6 +10,7 @@ import { endpoints } from "@/lib/api/endpoints";
 import type { CommentResponse } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/utils/format";
 import { canDeleteComment, canEditComment } from "@/lib/utils/permissions";
+import { useUserDirectory } from "@/features/tasks/queries";
 
 export const commentKeys = {
   list: (taskId: number) => ["tasks", taskId, "comments"] as const,
@@ -27,6 +28,7 @@ export function CommentThread({
   canComment: boolean;
 }) {
   const queryClient = useQueryClient();
+  const userMap = useUserDirectory();
   const [newComment, setNewComment] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -121,8 +123,11 @@ export function CommentThread({
                 className="rounded-[6px] border border-hairline bg-canvas p-3 space-y-1.5"
               >
                 <div className="flex items-center justify-between text-[11px] text-ink-muted">
-                  <span className="font-mono text-ink-secondary tabular-nums">
-                    User #{c.user_id}
+                  <span className="font-medium text-ink-secondary">
+                    {(() => {
+                      const u = userMap.get(c.user_id);
+                      return u ? `@${u.username}` : `User #${c.user_id}`;
+                    })()}
                   </span>
                   <span className="font-mono tabular-nums">
                     {formatDateTime(c.created_at)}

@@ -15,7 +15,7 @@ import type {
 } from "@/lib/api/types";
 import { cn } from "@/lib/utils/cn";
 import { formatDateTime } from "@/lib/utils/format";
-import { useCurrentUser } from "@/features/tasks/queries";
+import { useCurrentUser, useUserDirectory } from "@/features/tasks/queries";
 
 export const connectionKeys = {
   all: ["connections"] as const,
@@ -25,6 +25,7 @@ export const connectionKeys = {
 export function ConnectionsManager() {
   const queryClient = useQueryClient();
   const { data: me } = useCurrentUser();
+  const userMap = useUserDirectory();
   const [activeTab, setActiveTab] = useState<ConnectionStatus>("accepted");
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -184,6 +185,7 @@ export function ConnectionsManager() {
                     conn.user_id_1 === me?.user_id
                       ? conn.user_id_2
                       : conn.user_id_1;
+                  const otherUser = userMap.get(otherUserId);
 
                   return (
                     <div
@@ -192,9 +194,14 @@ export function ConnectionsManager() {
                     >
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2.5">
-                          <span className="font-mono text-[13px] font-medium text-ink-primary tabular-nums">
-                            User #{otherUserId}
+                          <span className="text-[13px] font-medium text-ink-primary">
+                            {otherUser ? `@${otherUser.username}` : `User #${otherUserId}`}
                           </span>
+                          {otherUser?.email && (
+                            <span className="text-[12px] text-ink-secondary">
+                              {otherUser.email}
+                            </span>
+                          )}
                           <span className="rounded-[4px] bg-subtle px-1.5 py-0.5 text-[11px] text-ink-muted">
                             {isIncoming ? "Incoming" : "Outgoing"}
                           </span>

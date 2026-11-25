@@ -1,5 +1,5 @@
-import { RegisterForm } from "@/features/auth/auth-forms";
+import { UnifiedAuthView } from "@/features/auth/unified-auth-view";
 
 export default function RegisterPage() {
-  return <RegisterForm />;
+  return <UnifiedAuthView initialMode="register" />;
 }

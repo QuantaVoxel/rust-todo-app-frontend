@@ -22,6 +22,7 @@ import type {
   TaskStatusLookup,
   UpdateTaskRequest,
   UserMeResponse,
+  UserSearchResult,
 } from "@/lib/api/types";
 
 export const lookupKeys = {
@@ -47,6 +48,25 @@ export function useCurrentUser() {
     queryFn: () => apiFetch<UserMeResponse>(endpoints.me()),
     staleTime: 5 * 60 * 1000,
   });
+}
+
+export function useUserDirectory() {
+  const { data: me } = useCurrentUser();
+  const { data: users = [] } = useQuery({
+    queryKey: ["users", "directory"],
+    queryFn: () => apiFetch<UserSearchResult[]>(endpoints.usersSearch()),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const userMap = new Map<number, { username: string; email: string }>();
+  if (me) {
+    userMap.set(me.user_id, { username: me.username, email: me.email });
+  }
+  for (const u of users) {
+    userMap.set(u.user_id, { username: u.username, email: u.email });
+  }
+
+  return userMap;
 }
 
 export function useStatusesLookup() {
