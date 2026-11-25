@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api/client";
@@ -10,6 +10,7 @@ import type {
   PriorityHistoryEntry,
   StatusHistoryEntry,
 } from "@/lib/api/types";
+import { cn } from "@/lib/utils/cn";
 import { formatDateTime } from "@/lib/utils/format";
 import {
   useLabelsList,
@@ -25,6 +26,9 @@ interface TimelineItem {
 }
 
 export function AuditTimeline({ taskId }: { taskId: number }) {
+  const [filter, setFilter] = useState<"all" | "status" | "priority" | "label">(
+    "all"
+  );
   const { data: statuses = [] } = useStatusesLookup();
   const { data: priorities = [] } = usePrioritiesLookup();
   const { data: labels = [] } = useLabelsList();
@@ -76,41 +80,76 @@ export function AuditTimeline({ taskId }: { taskId: number }) {
       })),
     ];
 
-    return merged.sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-  }, [statusHistory, priorityHistory, labelHistory, statuses, priorities, labels]);
+    return merged
+      .filter((item) => filter === "all" || item.kind === filter)
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+  }, [
+    statusHistory,
+    priorityHistory,
+    labelHistory,
+    statuses,
+    priorities,
+    labels,
+    filter,
+  ]);
 
   if (sLoading || pLoading || lLoading) {
     return <Skeleton className="h-24 w-full" />;
   }
 
-  if (items.length === 0) {
-    return (
-      <p className="rounded-[6px] border border-hairline bg-canvas px-3 py-2.5 text-[12px] text-ink-muted">
-        No audit events recorded yet.
-      </p>
-    );
-  }
-
   return (
-    <div className="space-y-2">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className="flex items-start justify-between gap-3 rounded-[6px] border border-hairline bg-canvas px-3 py-2"
-        >
-          <div className="space-y-0.5">
-            <p className="text-[12px] text-ink-primary">{item.summary}</p>
-            <p className="font-mono text-[11px] text-ink-muted tabular-nums">
-              {formatDateTime(item.timestamp)}
-            </p>
-          </div>
-          <span className="rounded-[4px] bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
-            {item.kind}
-          </span>
+    <div className="space-y-3">
+      {/* Sub-filter Pills */}
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
+            { id: "all", label: "All" },
+            { id: "status", label: "Status" },
+            { id: "priority", label: "Priority" },
+            { id: "label", label: "Labels" },
+          ] as const
+        ).map((pill) => (
+          <button
+            key={pill.id}
+            type="button"
+            onClick={() => setFilter(pill.id)}
+            className={cn(
+              "rounded-[6px] border px-2 py-0.5 text-[11px] font-medium transition-precision cursor-pointer",
+              filter === pill.id
+                ? "border-strong bg-subtle text-ink-primary"
+                : "border-hairline bg-canvas text-ink-muted hover:text-ink-secondary"
+            )}
+          >
+            {pill.label}
+          </button>
+        ))}
+      </div>
+
+      {items.length === 0 ? (
+        <p className="rounded-[6px] border border-hairline bg-canvas px-3 py-2.5 text-[12px] text-ink-muted">
+          No audit events recorded for this filter.
+        </p>
+      ) : (
+        <div className="relative space-y-3 pl-4 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-hairline">
+          {items.map((item) => (
+            <div key={item.id} className="relative flex items-start justify-between gap-3">
+              <span className="absolute -left-4 top-1.5 h-2.5 w-2.5 rounded-full border border-strong bg-surface" />
+              <div className="space-y-0.5">
+                <p className="text-[12px] text-ink-primary">{item.summary}</p>
+                <p className="font-mono text-[11px] text-ink-muted tabular-nums">
+                  {formatDateTime(item.timestamp)}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-[4px] bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
+                {item.kind}
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }

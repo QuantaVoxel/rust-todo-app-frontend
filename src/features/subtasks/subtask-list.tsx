@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusIcon } from "@/features/tasks/task-indicators";
 import { useStatusesLookup } from "@/features/tasks/queries";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -20,6 +20,7 @@ export function SubtaskList({
   taskId: number;
   canEdit: boolean;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -36,6 +37,7 @@ export function SubtaskList({
   const completedCount = subtasks.filter(
     (s) => s.status_id === completedStatus?.status_id
   ).length;
+  const ratio = subtasks.length > 0 ? completedCount / subtasks.length : 0;
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,10 +79,24 @@ export function SubtaskList({
         </h3>
         {subtasks.length > 0 && (
           <span className="font-mono text-[11px] text-ink-muted tabular-nums">
-            {completedCount}/{subtasks.length}
+            {completedCount}/{subtasks.length} completed
           </span>
         )}
       </div>
+
+      {subtasks.length > 0 && (
+        <div className="h-1 w-full overflow-hidden rounded-full bg-subtle">
+          <motion.div
+            className="h-full origin-left bg-[#16A34A]"
+            animate={{ scaleX: ratio }}
+            transition={
+              shouldReduceMotion
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 320, damping: 30 }
+            }
+          />
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-1.5">
@@ -104,20 +120,25 @@ export function SubtaskList({
               return (
                 <div
                   key={sub.subtask_id}
-                  className="group flex min-h-[36px] items-center gap-2.5 px-3 py-1.5"
+                  className="group flex min-h-[38px] items-center gap-2.5 px-3 py-1.5"
                 >
-                  <button
+                  <motion.button
                     type="button"
                     disabled={!canEdit}
+                    whileTap={shouldReduceMotion || !canEdit ? undefined : { scale: 0.88 }}
                     aria-label={`Toggle subtask ${sub.title}`}
                     onClick={() => handleToggle(sub.subtask_id, sub.status_id)}
-                    className="shrink-0 rounded-full p-0.5 hover:bg-subtle disabled:opacity-60 cursor-pointer"
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-precision disabled:opacity-60 cursor-pointer",
+                      isCompleted
+                        ? "border-[#16A34A] bg-[#16A34A] text-white"
+                        : "border-strong bg-surface hover:border-accent"
+                    )}
                   >
-                    <StatusIcon
-                      status={statusObj?.name ?? "pending"}
-                      className="h-3.5 w-3.5"
-                    />
-                  </button>
+                    {isCompleted && (
+                      <Check className="h-2.5 w-2.5" strokeWidth={2.5} />
+                    )}
+                  </motion.button>
 
                   {isEditing ? (
                     <input
@@ -180,7 +201,7 @@ export function SubtaskList({
               <input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Add a subtask..."
+                placeholder="+ Add subtask..."
                 className="h-7 flex-1 bg-transparent text-[13px] text-ink-primary placeholder:text-ink-muted focus:outline-none"
               />
               {newTitle.trim() && (
