@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import {
   CheckSquare,
@@ -44,6 +45,10 @@ const SCOPE_TABS: Array<{ id: SmartView; label: string }> = [
 ];
 
 export function TasksWorkspace() {
+  const searchParams = useSearchParams();
+  const initialTagParam = searchParams.get("tag_id");
+  const parsedTagParam = initialTagParam ? Number(initialTagParam) : undefined;
+
   const shouldReduceMotion = useReducedMotion();
   const smartView = useWorkspaceStore((s) => s.smartView);
   const setSmartView = useWorkspaceStore((s) => s.setSmartView);
@@ -60,7 +65,11 @@ export function TasksWorkspace() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<number | undefined>();
   const [priorityFilter, setPriorityFilter] = useState<number | undefined>();
-  const [tagFilter, setTagFilter] = useState<number | undefined>();
+  const [tagFilter, setTagFilter] = useState<number | undefined>(
+    parsedTagParam && Number.isFinite(parsedTagParam)
+      ? parsedTagParam
+      : undefined
+  );
   const [dueAfter, setDueAfter] = useState("");
   const [dueBefore, setDueBefore] = useState("");
   const [sort, setSort] = useState<SortOption>("-task_id");

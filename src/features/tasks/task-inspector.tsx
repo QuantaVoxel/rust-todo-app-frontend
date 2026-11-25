@@ -28,10 +28,7 @@ import { AttachmentPanel } from "@/features/attachments/attachment-panel";
 import { SharePanel } from "@/features/collaboration/share-panel";
 import { VoteBar } from "@/features/collaboration/vote-bar";
 import { CommentThread } from "@/features/comments/comment-thread";
-import { IntegrationPanel } from "@/features/context/integration-panel";
-import { LocationPanel } from "@/features/context/location-panel";
 import { NoteList } from "@/features/notes/note-list";
-import { SchedulingPanel } from "@/features/scheduling/scheduling-panel";
 import { SubtaskList } from "@/features/subtasks/subtask-list";
 import { cn } from "@/lib/utils/cn";
 import { formatDateTime } from "@/lib/utils/format";
@@ -48,8 +45,8 @@ import {
   useUpdateTask,
   useUpdateTaskProgress,
 } from "./queries";
-import { TaskClassificationsControl } from "./task-classifications-control";
 import { formatStatusLabel, StatusIcon } from "./task-indicators";
+import { TaskPropertiesTable } from "./task-properties-table";
 
 type BottomTab = "comments" | "notes" | "attachments" | "sharing" | "history";
 
@@ -69,6 +66,7 @@ export function TaskDetailView({
   const [activeTab, setActiveTab] = useState<BottomTab>("comments");
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [draftDesc, setDraftDesc] = useState<string | null>(null);
+  const [draftProgress, setDraftProgress] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,6 +89,15 @@ export function TaskDetailView({
   const permissions = task
     ? getTaskPermissions(task.user_id, me?.user_id, myShare?.permission)
     : null;
+  const displayedProgress = draftProgress ?? task?.progress_percentage ?? 0;
+
+  const commitProgress = (value: number) => {
+    if (!task || !permissions?.canEditTask) return;
+    updateProgress.mutate(
+      { taskId: task.task_id, progress_percentage: value },
+      { onSettled: () => setDraftProgress(null) }
+    );
+  };
 
   const handleSaveTitle = () => {
     if (!task || draftTitle === null || !permissions?.canEditTask) return;
@@ -318,16 +325,30 @@ export function TaskDetailView({
                   <span className="font-medium text-ink-secondary">
                     Completion progress
                   </span>
-                  <span className="font-mono text-[12px] font-semibold text-ink-primary tabular-nums">
-                    {task.progress_percentage}%
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {updateProgress.isPending && (
+                      <span className="text-[11px] text-ink-muted">
+                        Saving...
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "rounded-[4px] px-1.5 py-0.5 font-mono text-[12px] font-semibold tabular-nums transition-precision",
+                        draftProgress !== null
+                          ? "bg-accent text-white"
+                          : "bg-surface text-ink-primary border border-hairline"
+                      )}
+                    >
+                      {displayedProgress}%
+                    </span>
+                  </div>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-subtle">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-subtle">
                   <motion.div
                     className="h-full origin-left bg-accent"
-                    animate={{ scaleX: task.progress_percentage / 100 }}
+                    animate={{ scaleX: displayedProgress / 100 }}
                     transition={
-                      shouldReduceMotion
+                      shouldReduceMotion || draftProgress !== null
                         ? { duration: 0 }
                         : { type: "spring", stiffness: 320, damping: 30 }
                     }
@@ -340,19 +361,16 @@ export function TaskDetailView({
                       min={0}
                       max={100}
                       step={5}
-                      defaultValue={task.progress_percentage}
-                      key={`${task.task_id}-${task.progress_percentage}`}
+                      value={displayedProgress}
+                      onChange={(e) => setDraftProgress(Number(e.target.value))}
                       onMouseUp={(e) =>
-                        updateProgress.mutate({
-                          taskId: task.task_id,
-                          progress_percentage: Number(e.currentTarget.value),
-                        })
+                        commitProgress(Number(e.currentTarget.value))
+                      }
+                      onTouchEnd={(e) =>
+                        commitProgress(Number(e.currentTarget.value))
                       }
                       onKeyUp={(e) =>
-                        updateProgress.mutate({
-                          taskId: task.task_id,
-                          progress_percentage: Number(e.currentTarget.value),
-                        })
+                        commitProgress(Number(e.currentTarget.value))
                       }
                       className="flex-1 accent-[var(--accent-primary)] cursor-pointer"
                       aria-label="Progress slider"
@@ -362,15 +380,13 @@ export function TaskDetailView({
                         <button
                           key={pct}
                           type="button"
-                          onClick={() =>
-                            updateProgress.mutate({
-                              taskId: task.task_id,
-                              progress_percentage: pct,
-                            })
-                          }
+                          onClick={() => {
+                            setDraftProgress(pct);
+                            commitProgress(pct);
+                          }}
                           className={cn(
                             "rounded-[4px] border px-1.5 py-0.5 font-mono text-[10px] tabular-nums transition-precision cursor-pointer",
-                            task.progress_percentage === pct
+                            displayedProgress === pct
                               ? "border-accent bg-accent-tint text-accent"
                               : "border-hairline bg-surface text-ink-muted hover:text-ink-primary"
                           )}
@@ -390,113 +406,16 @@ export function TaskDetailView({
               />
             </section>
 
-            {/* ZONA C — Compact Metadata Properties Grid (2 Kolom) */}
-            <section className="space-y-4 rounded-[8px] border border-hairline bg-canvas p-4">
-              <h3 className="text-[12px] font-semibold text-ink-secondary">
-                Properties &amp; Context
-              </h3>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-ink-muted">
-                    Status
-                  </label>
-                  <select
-                    disabled={!permissions?.canEditTask}
-                    value={task.status_id}
-                    onChange={(e) =>
-                      updateTask.mutate({
-                        taskId: task.task_id,
-                        payload: { status_id: Number(e.target.value) },
-                      })
-                    }
-                    className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 text-[12px] text-ink-primary focus-ring disabled:opacity-60"
-                  >
-                    {statuses.map((s) => (
-                      <option key={s.status_id} value={s.status_id}>
-                        {formatStatusLabel(s.name)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-ink-muted">
-                    Priority
-                  </label>
-                  <select
-                    disabled={!permissions?.canEditTask}
-                    value={task.priority_id ?? ""}
-                    onChange={(e) =>
-                      updateTask.mutate({
-                        taskId: task.task_id,
-                        payload: {
-                          priority_id: e.target.value
-                            ? Number(e.target.value)
-                            : null,
-                        },
-                      })
-                    }
-                    className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 text-[12px] text-ink-primary focus-ring disabled:opacity-60"
-                  >
-                    <option value="">None</option>
-                    {priorities.map((p) => (
-                      <option key={p.priority_id} value={p.priority_id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-ink-muted">
-                    Due date
-                  </label>
-                  <input
-                    type="date"
-                    disabled={!permissions?.canEditTask}
-                    value={task.due_date ? task.due_date.slice(0, 10) : ""}
-                    onChange={(e) =>
-                      updateTask.mutate({
-                        taskId: task.task_id,
-                        payload: {
-                          due_date: e.target.value
-                            ? new Date(
-                                `${e.target.value}T17:00:00Z`
-                              ).toISOString()
-                            : null,
-                        },
-                      })
-                    }
-                    className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 font-mono text-[11px] text-ink-primary focus-ring disabled:opacity-60"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-hairline pt-3">
-                <TaskClassificationsControl
-                  taskId={task.task_id}
-                  canEdit={Boolean(permissions?.canEditTask)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 border-t border-hairline pt-3 md:grid-cols-2">
-                <SchedulingPanel
-                  taskId={task.task_id}
-                  canEdit={Boolean(permissions?.canEditTask)}
-                />
-                <div className="space-y-4">
-                  <LocationPanel
-                    taskId={task.task_id}
-                    canEdit={Boolean(permissions?.canEditTask)}
-                  />
-                  <IntegrationPanel
-                    taskId={task.task_id}
-                    canEdit={Boolean(permissions?.canEditTask)}
-                  />
-                </div>
-              </div>
-            </section>
+            {/* ZONA C — Compact Linear-Style Properties & Context Table */}
+            <TaskPropertiesTable
+              task={task}
+              statuses={statuses}
+              priorities={priorities}
+              canEdit={Boolean(permissions?.canEditTask)}
+              onUpdate={(payload) =>
+                updateTask.mutate({ taskId: task.task_id, payload })
+              }
+            />
 
             {/* ZONA D — Contextual Bottom Tabs (`layoutId` underline) */}
             <section>
