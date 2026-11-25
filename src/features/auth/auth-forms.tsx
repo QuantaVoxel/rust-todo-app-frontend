@@ -67,7 +67,7 @@ export function LoginForm() {
       router.replace("/tasks");
       router.refresh();
     } catch {
-      setServerError("Gagal menghubungi server autentikasi.");
+      setServerError("Unable to reach authentication service. Check backend status.");
     }
   };
 
@@ -87,43 +87,37 @@ export function LoginForm() {
         setServerError(err.message);
         return;
       }
-      setSeedMessage("Demo data siap. Gunakan Demo Quick-Fill untuk masuk.");
+      setSeedMessage("Demo database seeded. Credentials filled below.");
       handleDemoFill();
     } catch {
-      setServerError("Gagal menjalankan seeder demo.");
+      setServerError("Failed to run demo seeder. Ensure backend is running.");
     } finally {
       setIsSeeding(false);
     }
   };
 
   return (
-    <div className="w-full max-w-[380px] rounded-[10px] border border-hairline bg-surface p-6">
-      <div className="mb-6">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-[2px] bg-accent" />
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-ink-muted">
-            Todo App v2
-          </span>
-        </div>
-        <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-ink-primary">
-          Masuk ke Workspace
+    <div className="w-full max-w-[400px]">
+      <div className="mb-7">
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink-primary">
+          Sign in to your workspace
         </h1>
-        <p className="mt-1 text-[13px] text-ink-secondary">
-          Gunakan kredensial akun Anda untuk melanjutkan.
+        <p className="mt-1.5 text-[14px] text-ink-secondary">
+          Enter your email and password to continue.
         </p>
       </div>
 
       {serverError && (
         <div
           role="alert"
-          className="mb-4 rounded-[6px] border border-danger/25 bg-danger-tint px-3 py-2 text-[13px] text-danger"
+          className="mb-5 rounded-[6px] border border-danger/30 bg-danger-tint px-3.5 py-2.5 text-[13px] text-danger"
         >
           {serverError}
         </div>
       )}
 
       {seedMessage && (
-        <div className="mb-4 rounded-[6px] border border-success/25 bg-success-tint px-3 py-2 text-[13px] text-success">
+        <div className="mb-5 rounded-[6px] border border-success/30 bg-success-tint px-3.5 py-2.5 text-[13px] text-success">
           {seedMessage}
         </div>
       )}
@@ -132,7 +126,7 @@ export function LoginForm() {
         <div>
           <label
             htmlFor="login-email"
-            className="mb-1.5 block text-[12px] font-medium text-ink-secondary"
+            className="mb-1.5 block text-[13px] font-medium text-ink-secondary"
           >
             Email
           </label>
@@ -140,12 +134,12 @@ export function LoginForm() {
             id="login-email"
             type="email"
             autoComplete="email"
-            placeholder="nama@perusahaan.com"
+            placeholder="name@company.com"
             hasError={Boolean(form.formState.errors.email)}
             {...form.register("email")}
           />
           {form.formState.errors.email && (
-            <p className="mt-1 text-[12px] text-danger">
+            <p className="mt-1.5 text-[12px] text-danger">
               {form.formState.errors.email.message}
             </p>
           )}
@@ -154,9 +148,9 @@ export function LoginForm() {
         <div>
           <label
             htmlFor="login-password"
-            className="mb-1.5 block text-[12px] font-medium text-ink-secondary"
+            className="mb-1.5 block text-[13px] font-medium text-ink-secondary"
           >
-            Kata Sandi
+            Password
           </label>
           <Input
             id="login-password"
@@ -167,7 +161,7 @@ export function LoginForm() {
             {...form.register("password")}
           />
           {form.formState.errors.password && (
-            <p className="mt-1 text-[12px] text-danger">
+            <p className="mt-1.5 text-[12px] text-danger">
               {form.formState.errors.password.message}
             </p>
           )}
@@ -176,21 +170,26 @@ export function LoginForm() {
         <Button
           type="submit"
           variant="primary"
-          className="w-full h-9"
+          className="mt-2 h-9 w-full"
           disabled={form.formState.isSubmitting}
         >
           {form.formState.isSubmitting && (
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
           )}
-          Masuk
+          Sign in
         </Button>
       </form>
 
       {ENABLE_DEMO_MODE && (
-        <div className="mt-5 border-t border-hairline pt-4">
-          <p className="mb-2.5 text-[11px] font-medium uppercase tracking-[0.04em] text-ink-muted">
-            Demo Environment
-          </p>
+        <div className="mt-6 rounded-[8px] border border-hairline bg-canvas p-3.5">
+          <div className="mb-2.5 flex items-center justify-between">
+            <span className="text-[12px] font-medium text-ink-secondary">
+              Demo environment
+            </span>
+            <span className="font-mono text-[11px] text-ink-muted">
+              demo@todoapp.local
+            </span>
+          </div>
           <div className="flex gap-2">
             <Button
               type="button"
@@ -200,7 +199,7 @@ export function LoginForm() {
               onClick={handleDemoFill}
             >
               <Sparkles className="h-3.5 w-3.5 text-accent" strokeWidth={1.75} />
-              Isi Demo User
+              Fill demo account
             </Button>
             <Button
               type="button"
@@ -209,19 +208,19 @@ export function LoginForm() {
               onClick={handleSeedDemo}
               disabled={isSeeding}
             >
-              {isSeeding ? "Seeding..." : "Seed Demo DB"}
+              {isSeeding ? "Seeding..." : "Seed demo DB"}
             </Button>
           </div>
         </div>
       )}
 
-      <p className="mt-5 text-center text-[13px] text-ink-secondary">
-        Belum punya akun?{" "}
+      <p className="mt-6 text-[13px] text-ink-secondary">
+        Don&apos;t have an account?{" "}
         <Link
           href="/register"
           className="font-medium text-accent hover:underline"
         >
-          Daftar sekarang
+          Create account
         </Link>
       </p>
     </div>
@@ -266,7 +265,6 @@ export function RegisterForm() {
         return;
       }
 
-      // Auto-login immediately after successful registration
       const loginRes = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,31 +281,25 @@ export function RegisterForm() {
         router.replace("/login");
       }
     } catch {
-      setServerError("Gagal menghubungi server pendaftaran.");
+      setServerError("Unable to reach registration service.");
     }
   };
 
   return (
-    <div className="w-full max-w-[440px] rounded-[10px] border border-hairline bg-surface p-6">
-      <div className="mb-5">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-[2px] bg-accent" />
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-ink-muted">
-            Todo App v2
-          </span>
-        </div>
-        <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-ink-primary">
-          Buat Akun Baru
+    <div className="w-full max-w-[420px]">
+      <div className="mb-6">
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink-primary">
+          Create your account
         </h1>
-        <p className="mt-1 text-[13px] text-ink-secondary">
-          Lengkapi profil Anda untuk mulai mengelola task.
+        <p className="mt-1.5 text-[14px] text-ink-secondary">
+          Set up your profile to start organizing tasks and collaborating.
         </p>
       </div>
 
       {serverError && (
         <div
           role="alert"
-          className="mb-4 rounded-[6px] border border-danger/25 bg-danger-tint px-3 py-2 text-[13px] text-danger"
+          className="mb-5 rounded-[6px] border border-danger/30 bg-danger-tint px-3.5 py-2.5 text-[13px] text-danger"
         >
           {serverError}
         </div>
@@ -320,7 +312,7 @@ export function RegisterForm() {
               htmlFor="reg-first-name"
               className="mb-1 block text-[12px] font-medium text-ink-secondary"
             >
-              Nama Depan
+              First name
             </label>
             <Input
               id="reg-first-name"
@@ -339,7 +331,7 @@ export function RegisterForm() {
               htmlFor="reg-last-name"
               className="mb-1 block text-[12px] font-medium text-ink-secondary"
             >
-              Nama Belakang
+              Last name
             </label>
             <Input
               id="reg-last-name"
@@ -380,7 +372,7 @@ export function RegisterForm() {
               htmlFor="reg-phone"
               className="mb-1 block text-[12px] font-medium text-ink-secondary"
             >
-              Nomor Telepon
+              Phone number
             </label>
             <Input
               id="reg-phone"
@@ -422,7 +414,7 @@ export function RegisterForm() {
             htmlFor="reg-password"
             className="mb-1 block text-[12px] font-medium text-ink-secondary"
           >
-            Kata Sandi (min. 8 karakter)
+            Password (min. 8 characters)
           </label>
           <Input
             id="reg-password"
@@ -443,7 +435,7 @@ export function RegisterForm() {
             htmlFor="reg-avatar"
             className="mb-1 block text-[12px] font-medium text-ink-secondary"
           >
-            URL Avatar <span className="text-ink-muted">(Opsional)</span>
+            Avatar URL <span className="text-ink-muted">(Optional)</span>
           </label>
           <Input
             id="reg-avatar"
@@ -462,20 +454,20 @@ export function RegisterForm() {
         <Button
           type="submit"
           variant="primary"
-          className="w-full h-9 mt-2"
+          className="mt-2 h-9 w-full"
           disabled={form.formState.isSubmitting}
         >
           {form.formState.isSubmitting && (
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
           )}
-          Daftar Akun
+          Create account
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-[13px] text-ink-secondary">
-        Sudah punya akun?{" "}
+      <p className="mt-6 text-[13px] text-ink-secondary">
+        Already have an account?{" "}
         <Link href="/login" className="font-medium text-accent hover:underline">
-          Masuk di sini
+          Sign in
         </Link>
       </p>
     </div>

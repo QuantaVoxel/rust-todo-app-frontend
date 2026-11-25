@@ -1,9 +1,5 @@
 import { LoginForm } from "@/features/auth/auth-forms";
 
 export default function LoginPage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
-      <LoginForm />
-    </main>
-  );
+  return <LoginForm />;
 }

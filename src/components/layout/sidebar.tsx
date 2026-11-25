@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Archive,
@@ -10,12 +12,18 @@ import {
   CheckSquare,
   Inbox,
   LogOut,
+  Moon,
   Search,
   Settings,
   Share2,
+  Sun,
   Tags,
   Users,
+  X,
 } from "lucide-react";
+import { apiFetch } from "@/lib/api/client";
+import { endpoints } from "@/lib/api/endpoints";
+import type { UserSettingResponse } from "@/lib/api/types";
 import { cn } from "@/lib/utils/cn";
 import { useWorkspaceStore, type SmartView } from "@/stores/workspace-store";
 
@@ -65,14 +73,51 @@ const SMART_VIEWS: Array<{
   { id: "archived", label: "Archived", icon: Archive },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const smartView = useWorkspaceStore((s) => s.smartView);
   const setSmartView = useWorkspaceStore((s) => s.setSmartView);
   const setCommandPaletteOpen = useWorkspaceStore(
     (s) => s.setCommandPaletteOpen
   );
+  const [localDarkOverride, setLocalDarkOverride] = useState<boolean | null>(
+    null
+  );
+
+  const { data: userSettings } = useQuery({
+    queryKey: ["users", "me", "settings"],
+    queryFn: () => apiFetch<UserSettingResponse[]>(endpoints.meSettings()),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const themeSetting = userSettings?.find(
+    (s) => s.setting_key === "theme"
+  )?.setting_value;
+  const isDark =
+    localDarkOverride ?? (themeSetting ? themeSetting === "dark" : true);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
+
+  const updateThemeMutation = useMutation({
+    mutationFn: (themeValue: "dark" | "light") =>
+      apiFetch<UserSettingResponse>(endpoints.meSettingKey("theme"), {
+        method: "PUT",
+        body: { setting_value: themeValue },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users", "me", "settings"] });
+    },
+  });
+
+  const toggleTheme = () => {
+    const nextDark = !isDark;
+    setLocalDarkOverride(nextDark);
+    updateThemeMutation.mutate(nextDark ? "dark" : "light");
+  };
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -90,6 +135,16 @@ export function Sidebar() {
             Todo Workspace
           </span>
         </div>
+        {onCloseMobile && (
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            aria-label="Close navigation"
+            className="rounded-[6px] p-1 text-ink-muted hover:bg-subtle hover:text-ink-primary lg:hidden"
+          >
+            <X className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        )}
       </div>
 
       {/* Quick Command Search */}
@@ -97,11 +152,11 @@ export function Sidebar() {
         type="button"
         onClick={() => setCommandPaletteOpen(true)}
         className="mb-4 flex h-8 w-full items-center justify-between rounded-[6px] border border-hairline bg-surface px-2.5 text-[12px] text-ink-muted hover:border-strong hover:text-ink-secondary transition-precision focus-ring cursor-pointer"
-        aria-label="Buka pencarian cepat"
+        aria-label="Quick search"
       >
         <span className="flex items-center gap-2">
           <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
-          <span>Cari task...</span>
+          <span>Search tasks...</span>
         </span>
         <kbd className="rounded-[4px] bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-ink-muted tabular-nums">
           ⌘K
@@ -111,8 +166,8 @@ export function Sidebar() {
       {/* Navigation Sections */}
       <nav className="flex-1 space-y-5 overflow-y-auto pr-0.5">
         <div>
-          <p className="mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-muted">
-            Workspace
+          <p className="mb-1.5 px-2.5 text-[11px] font-medium text-ink-muted">
+            Views
           </p>
           <div className="space-y-0.5">
             {SMART_VIEWS.map((item) => {
@@ -126,7 +181,10 @@ export function Sidebar() {
                   href="/tasks"
                   active={isActive}
                   icon={<Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
-                  onClick={() => setSmartView(item.id)}
+                  onClick={() => {
+                    setSmartView(item.id);
+                    onCloseMobile?.();
+                  }}
                 />
               );
             })}
@@ -134,7 +192,7 @@ export function Sidebar() {
         </div>
 
         <div>
-          <p className="mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-muted">
+          <p className="mb-1.5 px-2.5 text-[11px] font-medium text-ink-muted">
             Taxonomy
           </p>
           <div className="space-y-0.5">
@@ -143,13 +201,14 @@ export function Sidebar() {
               href="/classifications"
               active={pathname.startsWith("/classifications")}
               icon={<Tags className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+              onClick={onCloseMobile}
             />
           </div>
         </div>
 
         <div>
-          <p className="mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-muted">
-            Social & Audit
+          <p className="mb-1.5 px-2.5 text-[11px] font-medium text-ink-muted">
+            Collaboration
           </p>
           <div className="space-y-0.5">
             <NavItem
@@ -157,37 +216,58 @@ export function Sidebar() {
               href="/connections"
               active={pathname.startsWith("/connections")}
               icon={<Users className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+              onClick={onCloseMobile}
             />
             <NavItem
               label="Notifications"
               href="/notifications"
               active={pathname.startsWith("/notifications")}
               icon={<Bell className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+              onClick={onCloseMobile}
             />
             <NavItem
               label="Activity Logs"
               href="/activity"
               active={pathname.startsWith("/activity")}
               icon={<Activity className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+              onClick={onCloseMobile}
             />
           </div>
         </div>
       </nav>
 
       {/* Bottom Footer Controls */}
-      <div className="mt-3 border-t border-hairline pt-2.5 space-y-1">
+      <div className="mt-3 space-y-1 border-t border-hairline pt-2.5">
         <div className="flex items-center justify-between px-2.5 py-1 text-[11px] text-ink-muted">
           <span className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             <span>API Ready</span>
           </span>
-          <span className="font-mono text-[10px] tabular-nums">v2</span>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Toggle color theme"
+            className="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[11px] text-ink-secondary hover:bg-subtle hover:text-ink-primary transition-precision focus-ring cursor-pointer"
+          >
+            {isDark ? (
+              <>
+                <Moon className="h-3 w-3" strokeWidth={1.75} />
+                <span>Dark</span>
+              </>
+            ) : (
+              <>
+                <Sun className="h-3 w-3" strokeWidth={1.75} />
+                <span>Light</span>
+              </>
+            )}
+          </button>
         </div>
         <NavItem
           label="Settings"
           href="/settings"
           active={pathname.startsWith("/settings")}
           icon={<Settings className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+          onClick={onCloseMobile}
         />
         <button
           type="button"
@@ -195,7 +275,7 @@ export function Sidebar() {
           className="flex h-8 w-full items-center gap-2.5 rounded-[6px] px-2.5 text-[13px] font-medium text-ink-secondary hover:bg-subtle hover:text-danger transition-precision focus-ring cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          <span>Keluar</span>
+          <span>Sign out</span>
         </button>
       </div>
     </aside>
