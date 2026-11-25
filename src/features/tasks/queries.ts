@@ -8,12 +8,17 @@ import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type {
   ArchiveTaskResponse,
+  CategoryResponse,
   CreateTaskRequest,
+  EnumLookups,
+  LabelResponse,
   PaginatedResponse,
   ProgressResponse,
+  TagResponse,
   TaskListQuery,
   TaskPriorityLookup,
   TaskResponse,
+  TaskShareResponse,
   TaskStatusLookup,
   UpdateTaskRequest,
   UserMeResponse,
@@ -22,6 +27,10 @@ import type {
 export const lookupKeys = {
   statuses: ["lookups", "statuses"] as const,
   priorities: ["lookups", "priorities"] as const,
+  enums: ["lookups", "enums"] as const,
+  tags: ["classifications", "tags"] as const,
+  categories: ["classifications", "categories"] as const,
+  labels: ["classifications", "labels"] as const,
   me: ["users", "me"] as const,
 };
 
@@ -29,6 +38,7 @@ export const taskKeys = {
   all: ["tasks"] as const,
   list: (query: TaskListQuery) => ["tasks", "list", query] as const,
   detail: (taskId: number) => ["tasks", "detail", taskId] as const,
+  shares: (taskId: number) => ["tasks", "shares", taskId] as const,
 };
 
 export function useCurrentUser() {
@@ -55,10 +65,43 @@ export function usePrioritiesLookup() {
   });
 }
 
+export function useEnumsLookup() {
+  return useQuery({
+    queryKey: lookupKeys.enums,
+    queryFn: () => apiFetch<EnumLookups>(endpoints.enums()),
+    staleTime: Infinity,
+  });
+}
+
+export function useTagsList() {
+  return useQuery({
+    queryKey: lookupKeys.tags,
+    queryFn: () => apiFetch<TagResponse[]>(endpoints.tags()),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCategoriesList() {
+  return useQuery({
+    queryKey: lookupKeys.categories,
+    queryFn: () => apiFetch<CategoryResponse[]>(endpoints.categories()),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useLabelsList() {
+  return useQuery({
+    queryKey: lookupKeys.labels,
+    queryFn: () => apiFetch<LabelResponse[]>(endpoints.labels()),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useTasksList(query: TaskListQuery) {
   return useQuery({
     queryKey: taskKeys.list(query),
-    queryFn: () => apiFetch<PaginatedResponse<TaskResponse>>(endpoints.tasks(query)),
+    queryFn: () =>
+      apiFetch<PaginatedResponse<TaskResponse>>(endpoints.tasks(query)),
     staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
   });
@@ -69,6 +112,15 @@ export function useTaskDetail(taskId: number | null) {
     queryKey: taskId ? taskKeys.detail(taskId) : ["tasks", "detail", "none"],
     queryFn: () => apiFetch<TaskResponse>(endpoints.task(taskId!)),
     enabled: Boolean(taskId),
+  });
+}
+
+export function useTaskShares(taskId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: taskId ? taskKeys.shares(taskId) : ["tasks", "shares", "none"],
+    queryFn: () => apiFetch<TaskShareResponse[]>(endpoints.taskShares(taskId!)),
+    enabled: Boolean(taskId) && enabled,
+    staleTime: 60 * 1000,
   });
 }
 
@@ -121,7 +173,12 @@ export function useUpdateTaskProgress() {
         method: "PUT",
         body: { progress_percentage },
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      queryClient.setQueryData<TaskResponse>(
+        taskKeys.detail(res.task_id),
+        (prev) =>
+          prev ? { ...prev, progress_percentage: res.progress_percentage } : prev
+      );
       queryClient.invalidateQueries({ queryKey: taskKeys.all });
     },
   });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,11 +15,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { applyApiValidationErrors } from "@/lib/api/client";
+import { cn } from "@/lib/utils/cn";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import {
   useCreateTask,
   usePrioritiesLookup,
   useStatusesLookup,
+  useTagsList,
 } from "./queries";
 
 const quickCreateSchema = z.object({
@@ -40,8 +42,11 @@ export function QuickCreateModal() {
   const setOpen = useWorkspaceStore((s) => s.setQuickCreateOpen);
   const setActiveTaskId = useWorkspaceStore((s) => s.setActiveTaskId);
 
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+
   const { data: statuses = [] } = useStatusesLookup();
   const { data: priorities = [] } = usePrioritiesLookup();
+  const { data: tags = [] } = useTagsList();
   const createTask = useCreateTask();
 
   const defaultStatusId = statuses[0]?.status_id ?? 1;
@@ -63,6 +68,14 @@ export function QuickCreateModal() {
     }
   }, [open, statuses, form]);
 
+  const toggleTag = (tagId: number) => {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId)
+        ? prev.filter((id) => id !== tagId)
+        : [...prev, tagId]
+    );
+  };
+
   const onSubmit = async (values: QuickCreateValues) => {
     try {
       const dueDateIso = values.due_date
@@ -75,9 +88,11 @@ export function QuickCreateModal() {
         status_id: values.status_id,
         priority_id: values.priority_id ?? null,
         due_date: dueDateIso,
+        tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
       });
 
       form.reset();
+      setSelectedTagIds([]);
       setOpen(false);
       setActiveTaskId(created.task_id);
     } catch (error) {
@@ -87,7 +102,7 @@ export function QuickCreateModal() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-[480px]">
+      <DialogContent className="max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Create task</DialogTitle>
           <DialogDescription>
@@ -193,6 +208,34 @@ export function QuickCreateModal() {
               />
             </div>
           </div>
+
+          {tags.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[12px] font-medium text-ink-secondary">
+                Tags
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag) => {
+                  const active = selectedTagIds.includes(tag.tag_id);
+                  return (
+                    <button
+                      key={tag.tag_id}
+                      type="button"
+                      onClick={() => toggleTag(tag.tag_id)}
+                      className={cn(
+                        "rounded-[6px] border px-2 py-1 text-[12px] font-medium transition-precision cursor-pointer",
+                        active
+                          ? "border-accent bg-accent-tint text-accent"
+                          : "border-hairline bg-subtle text-ink-secondary hover:text-ink-primary"
+                      )}
+                    >
+                      #{tag.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 border-t border-hairline pt-4">
             <Button

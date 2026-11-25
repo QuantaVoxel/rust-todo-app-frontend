@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckSquare,
   LayoutGrid,
   List,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +17,11 @@ import { cn } from "@/lib/utils/cn";
 import { formatShortDate, isOverdue } from "@/lib/utils/format";
 import { useWorkspaceStore, type SmartView } from "@/stores/workspace-store";
 import {
+  useCreateTask,
+  useEnumsLookup,
   usePrioritiesLookup,
   useStatusesLookup,
+  useTagsList,
   useTasksList,
   useUpdateTask,
 } from "./queries";
@@ -37,19 +41,36 @@ const VIEW_TITLES: Record<SmartView, string> = {
   archived: "Archived",
 };
 
+type SortOption = NonNullable<TaskListQuery["sort"]>;
+
 export function TasksWorkspace() {
   const smartView = useWorkspaceStore((s) => s.smartView);
+  const setSmartView = useWorkspaceStore((s) => s.setSmartView);
   const viewMode = useWorkspaceStore((s) => s.viewMode);
   const setViewMode = useWorkspaceStore((s) => s.setViewMode);
   const activeTaskId = useWorkspaceStore((s) => s.activeTaskId);
   const setActiveTaskId = useWorkspaceStore((s) => s.setActiveTaskId);
   const setQuickCreateOpen = useWorkspaceStore((s) => s.setQuickCreateOpen);
 
+  // Filter & Pagination State
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<number | undefined>();
   const [priorityFilter, setPriorityFilter] = useState<number | undefined>();
+  const [tagFilter, setTagFilter] = useState<number | undefined>();
+  const [dueAfter, setDueAfter] = useState("");
+  const [dueBefore, setDueBefore] = useState("");
+  const [sort, setSort] = useState<SortOption>("-task_id");
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+
+  // Inline Quick Add State
+  const quickTitleRef = useRef<HTMLInputElement>(null);
+  const [quickTitle, setQuickTitle] = useState("");
+  const [quickPriorityId, setQuickPriorityId] = useState<number | undefined>();
+  const [quickDueDate, setQuickDueDate] = useState("");
+  const [quickTagId, setQuickTagId] = useState<number | undefined>();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -69,20 +90,49 @@ export function TasksWorkspace() {
     archived: smartView === "archived",
     status_id: statusFilter,
     priority_id: priorityFilter,
+    tag_id: tagFilter,
+    due_after: dueAfter ? new Date(`${dueAfter}T00:00:00Z`).toISOString() : undefined,
+    due_before: dueBefore ? new Date(`${dueBefore}T23:59:59Z`).toISOString() : undefined,
     search: debouncedSearch || undefined,
+    sort,
     page,
-    per_page: 20,
+    per_page: perPage,
   };
 
+  // Prefetch & cache lookups + taxonomies
   const { data: statuses = [] } = useStatusesLookup();
   const { data: priorities = [] } = usePrioritiesLookup();
+  const { data: tags = [] } = useTagsList();
+  useEnumsLookup();
+
   const { data: taskPage, isLoading, isError, error } = useTasksList(queryParams);
+  const createTask = useCreateTask();
   const updateTask = useUpdateTask();
 
-  const tasks = taskPage?.data ?? [];
+  const tasks = useMemo(() => taskPage?.data ?? [], [taskPage]);
   const meta = taskPage?.meta;
 
-  // Global keyboard shortcuts (C: Quick Create, Esc: Close Inspector)
+  const hasActiveFilters = Boolean(
+    debouncedSearch ||
+      statusFilter ||
+      priorityFilter ||
+      tagFilter ||
+      dueAfter ||
+      dueBefore
+  );
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setDebouncedSearch("");
+    setStatusFilter(undefined);
+    setPriorityFilter(undefined);
+    setTagFilter(undefined);
+    setDueAfter("");
+    setDueBefore("");
+    setPage(1);
+  };
+
+  // Keyboard shortcuts: N / C (Quick Add), J/K or Down/Up, Enter, Esc
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -99,15 +149,35 @@ export function TasksWorkspace() {
 
       if (isEditable) return;
 
+      if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        quickTitleRef.current?.focus();
+        return;
+      }
+
       if (e.key.toLowerCase() === "c" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         setQuickCreateOpen(true);
+        return;
+      }
+
+      if (tasks.length === 0) return;
+
+      if (e.key === "ArrowDown" || e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setFocusedIndex((idx) => Math.min(tasks.length - 1, idx + 1));
+      } else if (e.key === "ArrowUp" || e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setFocusedIndex((idx) => Math.max(0, idx - 1));
+      } else if (e.key === "Enter" && focusedIndex >= 0 && tasks[focusedIndex]) {
+        e.preventDefault();
+        setActiveTaskId(tasks[focusedIndex].task_id);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setActiveTaskId, setQuickCreateOpen]);
+  }, [tasks, focusedIndex, setActiveTaskId, setQuickCreateOpen]);
 
   const handleToggleComplete = (task: TaskResponse) => {
     const completedStatus = statuses.find((s) => s.name === "completed");
@@ -123,6 +193,34 @@ export function TasksWorkspace() {
           : completedStatus.status_id,
       },
     });
+  };
+
+  const handleInlineQuickAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = quickTitle.trim();
+    const defaultStatus = statuses.find((s) => s.name === "pending") ?? statuses[0];
+    if (!title || !defaultStatus) return;
+
+    createTask.mutate(
+      {
+        title,
+        status_id: defaultStatus.status_id,
+        priority_id: quickPriorityId ?? null,
+        due_date: quickDueDate
+          ? new Date(`${quickDueDate}T17:00:00Z`).toISOString()
+          : null,
+        tag_ids: quickTagId ? [quickTagId] : undefined,
+      },
+      {
+        onSuccess: (created) => {
+          setQuickTitle("");
+          setQuickPriorityId(undefined);
+          setQuickDueDate("");
+          setQuickTagId(undefined);
+          setActiveTaskId(created.task_id);
+        },
+      }
+    );
   };
 
   return (
@@ -187,9 +285,9 @@ export function TasksWorkspace() {
           </div>
         </header>
 
-        {/* Filter & Search Bar */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-hairline bg-canvas/50 px-5 py-2.5">
-          <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+        {/* Comprehensive Filter & Sort Toolbar */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-canvas/50 px-5 py-2.5">
+          <div className="relative min-w-[180px] flex-1 max-w-[260px]">
             <Search
               className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted"
               strokeWidth={1.75}
@@ -197,10 +295,25 @@ export function TasksWorkspace() {
             <Input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Filter by title or description..."
-              className="h-8 pl-8 text-[13px]"
+              placeholder="Search tasks..."
+              className="h-8 pl-8 text-[12px]"
             />
           </div>
+
+          <select
+            aria-label="Scope"
+            value={smartView === "owned" || smartView === "shared" ? smartView : "all"}
+            onChange={(e) => {
+              const val = e.target.value as SmartView;
+              setSmartView(val);
+              setPage(1);
+            }}
+            className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 text-[12px] text-ink-secondary focus-ring"
+          >
+            <option value="all">Scope: All</option>
+            <option value="owned">Scope: Owned</option>
+            <option value="shared">Scope: Shared</option>
+          </select>
 
           <select
             aria-label="Filter by status"
@@ -209,9 +322,9 @@ export function TasksWorkspace() {
               setStatusFilter(e.target.value ? Number(e.target.value) : undefined);
               setPage(1);
             }}
-            className="h-8 rounded-[6px] border border-hairline bg-subtle px-2.5 text-[12px] text-ink-secondary focus-ring"
+            className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 text-[12px] text-ink-secondary focus-ring"
           >
-            <option value="">All statuses</option>
+            <option value="">Status: All</option>
             {statuses.map((s) => (
               <option key={s.status_id} value={s.status_id}>
                 {formatStatusLabel(s.name)}
@@ -228,16 +341,161 @@ export function TasksWorkspace() {
               );
               setPage(1);
             }}
-            className="h-8 rounded-[6px] border border-hairline bg-subtle px-2.5 text-[12px] text-ink-secondary focus-ring"
+            className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 text-[12px] text-ink-secondary focus-ring"
           >
-            <option value="">All priorities</option>
+            <option value="">Priority: All</option>
             {priorities.map((p) => (
               <option key={p.priority_id} value={p.priority_id}>
                 {p.name}
               </option>
             ))}
           </select>
+
+          {tags.length > 0 && (
+            <select
+              aria-label="Filter by tag"
+              value={tagFilter ?? ""}
+              onChange={(e) => {
+                setTagFilter(e.target.value ? Number(e.target.value) : undefined);
+                setPage(1);
+              }}
+              className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 text-[12px] text-ink-secondary focus-ring"
+            >
+              <option value="">Tag: All</option>
+              {tags.map((t) => (
+                <option key={t.tag_id} value={t.tag_id}>
+                  #{t.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              aria-label="Due after"
+              title="Due after"
+              value={dueAfter}
+              onChange={(e) => {
+                setDueAfter(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 font-mono text-[11px] text-ink-secondary focus-ring"
+            />
+            <span className="text-[11px] text-ink-muted">-</span>
+            <input
+              type="date"
+              aria-label="Due before"
+              title="Due before"
+              value={dueBefore}
+              onChange={(e) => {
+                setDueBefore(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 font-mono text-[11px] text-ink-secondary focus-ring"
+            />
+          </div>
+
+          <select
+            aria-label="Sort tasks"
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as SortOption);
+              setPage(1);
+            }}
+            className="h-8 rounded-[6px] border border-hairline bg-subtle px-2 text-[12px] text-ink-secondary focus-ring"
+          >
+            <option value="-task_id">Sort: Newest</option>
+            <option value="due_date">Due date (Asc)</option>
+            <option value="-due_date">Due date (Desc)</option>
+            <option value="-priority">Priority (High first)</option>
+            <option value="priority">Priority (Low first)</option>
+            <option value="-created_at">Created (Newest)</option>
+            <option value="created_at">Created (Oldest)</option>
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex h-8 items-center gap-1 rounded-[6px] px-2 text-[12px] text-ink-muted hover:bg-subtle hover:text-ink-primary cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <span>Clear</span>
+            </button>
+          )}
         </div>
+
+        {/* Inline Quick Add Bar */}
+        {smartView !== "archived" && (
+          <form
+            onSubmit={handleInlineQuickAdd}
+            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-surface px-5 py-2"
+          >
+            <Plus
+              className="h-4 w-4 shrink-0 text-accent"
+              strokeWidth={1.75}
+            />
+            <input
+              ref={quickTitleRef}
+              value={quickTitle}
+              onChange={(e) => setQuickTitle(e.target.value)}
+              placeholder="Quick add task (press N to focus)..."
+              className="h-8 min-w-[200px] flex-1 bg-transparent text-[13px] text-ink-primary placeholder:text-ink-muted focus:outline-none"
+            />
+            <select
+              aria-label="Quick add priority"
+              value={quickPriorityId ?? ""}
+              onChange={(e) =>
+                setQuickPriorityId(
+                  e.target.value ? Number(e.target.value) : undefined
+                )
+              }
+              className="h-7 rounded-[6px] border border-hairline bg-subtle px-2 text-[11px] text-ink-secondary focus-ring"
+            >
+              <option value="">Priority</option>
+              {priorities.map((p) => (
+                <option key={p.priority_id} value={p.priority_id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {tags.length > 0 && (
+              <select
+                aria-label="Quick add tag"
+                value={quickTagId ?? ""}
+                onChange={(e) =>
+                  setQuickTagId(
+                    e.target.value ? Number(e.target.value) : undefined
+                  )
+                }
+                className="h-7 rounded-[6px] border border-hairline bg-subtle px-2 text-[11px] text-ink-secondary focus-ring"
+              >
+                <option value="">Tag</option>
+                {tags.map((t) => (
+                  <option key={t.tag_id} value={t.tag_id}>
+                    #{t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <input
+              type="date"
+              aria-label="Quick add due date"
+              value={quickDueDate}
+              onChange={(e) => setQuickDueDate(e.target.value)}
+              className="h-7 rounded-[6px] border border-hairline bg-subtle px-2 font-mono text-[11px] text-ink-secondary focus-ring"
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              disabled={!quickTitle.trim() || createTask.isPending}
+            >
+              Add
+            </Button>
+          </form>
+        )}
 
         {/* Workspace Content */}
         <div className="flex-1 overflow-y-auto">
@@ -267,9 +525,13 @@ export function TasksWorkspace() {
               <p className="mt-1 text-[13px] text-ink-secondary">
                 Press{" "}
                 <kbd className="rounded-[4px] border border-hairline bg-subtle px-1.5 py-0.5 font-mono text-[11px] text-ink-primary">
+                  N
+                </kbd>{" "}
+                for quick add or{" "}
+                <kbd className="rounded-[4px] border border-hairline bg-subtle px-1.5 py-0.5 font-mono text-[11px] text-ink-primary">
                   C
                 </kbd>{" "}
-                to create a new task.
+                for full task modal.
               </p>
               <Button
                 type="button"
@@ -284,8 +546,9 @@ export function TasksWorkspace() {
             </div>
           ) : viewMode === "list" ? (
             <div>
-              {tasks.map((task) => {
+              {tasks.map((task, idx) => {
                 const selected = activeTaskId === task.task_id;
+                const focused = focusedIndex === idx;
                 const overdue = isOverdue(task.due_date, task.status);
                 const cancelled = task.status?.toLowerCase() === "cancelled";
 
@@ -294,7 +557,10 @@ export function TasksWorkspace() {
                     key={task.task_id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setActiveTaskId(task.task_id)}
+                    onClick={() => {
+                      setFocusedIndex(idx);
+                      setActiveTaskId(task.task_id);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -303,7 +569,11 @@ export function TasksWorkspace() {
                     }}
                     className={cn(
                       "flex h-[46px] items-center gap-3 border-b border-hairline px-5 transition-precision cursor-pointer focus-ring",
-                      selected ? "bg-accent-tint" : "hover:bg-subtle/60"
+                      selected
+                        ? "bg-accent-tint"
+                        : focused
+                          ? "bg-subtle"
+                          : "hover:bg-subtle/60"
                     )}
                   >
                     <button
@@ -357,32 +627,50 @@ export function TasksWorkspace() {
                 );
               })}
 
-              {/* Pagination Footer */}
-              {meta && meta.total_pages > 1 && (
-                <div className="flex items-center justify-between px-5 py-3 text-[12px] text-ink-secondary">
-                  <span className="font-mono tabular-nums">
-                    Page {meta.page} of {meta.total_pages}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+              {/* Pagination & Per-Page Footer */}
+              {meta && (
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-[12px] text-ink-secondary">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono tabular-nums">
+                      Page {meta.page} of {Math.max(1, meta.total_pages)} ({meta.total} total)
+                    </span>
+                    <select
+                      aria-label="Items per page"
+                      value={perPage}
+                      onChange={(e) => {
+                        setPerPage(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="h-7 rounded-[6px] border border-hairline bg-subtle px-2 font-mono text-[11px] text-ink-secondary focus-ring"
                     >
-                      Previous
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={page >= meta.total_pages}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      Next
-                    </Button>
+                      <option value={20}>20 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
                   </div>
+
+                  {meta.total_pages > 1 && (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={page >= meta.total_pages}
+                        onClick={() => setPage((p) => p + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

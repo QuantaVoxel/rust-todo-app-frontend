@@ -2,8 +2,16 @@
 
 import { useState } from "react";
 import { Archive, ArchiveRestore, Trash2, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AuditTimeline } from "@/features/audit/audit-timeline";
+import { AttachmentPanel } from "@/features/attachments/attachment-panel";
+import { CommentThread } from "@/features/comments/comment-thread";
+import { LocationPanel } from "@/features/context/location-panel";
+import { NoteList } from "@/features/notes/note-list";
+import { SchedulingPanel } from "@/features/scheduling/scheduling-panel";
+import { SubtaskList } from "@/features/subtasks/subtask-list";
 import { cn } from "@/lib/utils/cn";
 import { formatDateTime } from "@/lib/utils/format";
 import { getTaskPermissions } from "@/lib/utils/permissions";
@@ -15,6 +23,7 @@ import {
   usePrioritiesLookup,
   useStatusesLookup,
   useTaskDetail,
+  useTaskShares,
   useUpdateTask,
   useUpdateTaskProgress,
 } from "./queries";
@@ -28,9 +37,15 @@ export function TaskInspector() {
   const [activeTab, setActiveTab] = useState<InspectorTab>("work");
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   const [draftDesc, setDraftDesc] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: me } = useCurrentUser();
   const { data: task, isLoading } = useTaskDetail(activeTaskId);
+  const isOwner = Boolean(task && me && task.user_id === me.user_id);
+  const { data: shares = [] } = useTaskShares(
+    activeTaskId,
+    Boolean(activeTaskId && task && !isOwner)
+  );
   const { data: statuses = [] } = useStatusesLookup();
   const { data: priorities = [] } = usePrioritiesLookup();
 
@@ -41,12 +56,13 @@ export function TaskInspector() {
 
   if (!activeTaskId) return null;
 
+  const myShare = shares.find((s) => s.user_id === me?.user_id);
   const permissions = task
-    ? getTaskPermissions(task.user_id, me?.user_id)
+    ? getTaskPermissions(task.user_id, me?.user_id, myShare?.permission)
     : null;
 
   const handleSaveTitle = () => {
-    if (!task || draftTitle === null) return;
+    if (!task || draftTitle === null || !permissions?.canEditTask) return;
     const trimmed = draftTitle.trim();
     setDraftTitle(null);
     if (trimmed && trimmed !== task.title) {
@@ -55,7 +71,7 @@ export function TaskInspector() {
   };
 
   const handleSaveDescription = () => {
-    if (!task || draftDesc === null) return;
+    if (!task || draftDesc === null || !permissions?.canEditTask) return;
     const next = draftDesc.trim() || null;
     setDraftDesc(null);
     if (next !== task.description) {
@@ -79,6 +95,11 @@ export function TaskInspector() {
               <StatusIcon status={task.status} className="h-3.5 w-3.5" />
               <span>{formatStatusLabel(task.status)}</span>
             </span>
+          )}
+          {permissions && (
+            <Badge variant={permissions.level === "owner" ? "accent" : "neutral"}>
+              {permissions.level}
+            </Badge>
           )}
         </div>
 
@@ -104,27 +125,54 @@ export function TaskInspector() {
             </Button>
           )}
           {task && permissions?.canDeleteTask && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label="Delete task"
-              className="hover:text-danger"
-              onClick={() => {
-                deleteTask.mutate(task.task_id, {
-                  onSuccess: () => setActiveTaskId(null),
-                });
-              }}
-            >
-              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-            </Button>
+            <>
+              {confirmDelete ? (
+                <div className="flex items-center gap-1 rounded-[6px] border border-danger/30 bg-danger-tint px-1.5 py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteTask.mutate(task.task_id, {
+                        onSuccess: () => {
+                          setConfirmDelete(false);
+                          setActiveTaskId(null);
+                        },
+                      });
+                    }}
+                    className="text-[11px] font-medium text-danger hover:underline cursor-pointer"
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="text-[11px] text-ink-muted hover:text-ink-primary cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Delete task"
+                  className="hover:text-danger"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+                </Button>
+              )}
+            </>
           )}
           <Button
             type="button"
             variant="ghost"
             size="icon"
             aria-label="Close inspector"
-            onClick={() => setActiveTaskId(null)}
+            onClick={() => {
+              setConfirmDelete(false);
+              setActiveTaskId(null);
+            }}
           >
             <X className="h-4 w-4" strokeWidth={1.75} />
           </Button>
@@ -155,17 +203,21 @@ export function TaskInspector() {
                   }
                 }}
                 aria-label="Task title"
-                className="w-full bg-transparent text-[18px] font-semibold leading-[26px] tracking-[-0.015em] text-ink-primary focus:outline-none focus:ring-1 focus:ring-accent rounded-[4px] px-1 -mx-1"
+                className="w-full rounded-[4px] bg-transparent px-1 -mx-1 text-[18px] font-semibold leading-[26px] tracking-[-0.015em] text-ink-primary focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-90"
               />
               <textarea
                 rows={3}
                 disabled={!permissions?.canEditTask}
                 value={draftDesc ?? task.description ?? ""}
-                placeholder="Add description..."
+                placeholder={
+                  permissions?.canEditTask
+                    ? "Add description..."
+                    : "No description provided."
+                }
                 onChange={(e) => setDraftDesc(e.target.value)}
                 onBlur={handleSaveDescription}
                 aria-label="Task description"
-                className="w-full resize-none rounded-[6px] border border-transparent bg-transparent px-1 -mx-1 py-1 text-[13px] leading-relaxed text-ink-secondary placeholder:text-ink-muted focus:border-hairline focus:bg-subtle focus:outline-none"
+                className="w-full resize-none rounded-[6px] border border-transparent bg-transparent px-1 -mx-1 py-1 text-[13px] leading-relaxed text-ink-secondary placeholder:text-ink-muted focus:border-hairline focus:bg-subtle focus:outline-none disabled:opacity-90"
               />
             </div>
 
@@ -184,7 +236,7 @@ export function TaskInspector() {
                       payload: { status_id: Number(e.target.value) },
                     })
                   }
-                  className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 text-[12px] text-ink-primary focus-ring"
+                  className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 text-[12px] text-ink-primary focus-ring disabled:opacity-60"
                 >
                   {statuses.map((s) => (
                     <option key={s.status_id} value={s.status_id}>
@@ -211,7 +263,7 @@ export function TaskInspector() {
                       },
                     })
                   }
-                  className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 text-[12px] text-ink-primary focus-ring"
+                  className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 text-[12px] text-ink-primary focus-ring disabled:opacity-60"
                 >
                   <option value="">None</option>
                   {priorities.map((p) => (
@@ -240,7 +292,7 @@ export function TaskInspector() {
                       },
                     })
                   }
-                  className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 font-mono text-[11px] text-ink-primary focus-ring"
+                  className="h-8 w-full rounded-[6px] border border-hairline bg-surface px-2 font-mono text-[11px] text-ink-primary focus-ring disabled:opacity-60"
                 />
               </div>
             </div>
@@ -261,19 +313,21 @@ export function TaskInspector() {
                 disabled={!permissions?.canEditTask}
                 defaultValue={task.progress_percentage}
                 key={`${task.task_id}-${task.progress_percentage}`}
-                onMouseUp={(e) =>
+                onMouseUp={(e) => {
+                  if (!permissions?.canEditTask) return;
                   updateProgress.mutate({
                     taskId: task.task_id,
                     progress_percentage: Number(e.currentTarget.value),
-                  })
-                }
-                onKeyUp={(e) =>
+                  });
+                }}
+                onKeyUp={(e) => {
+                  if (!permissions?.canEditTask) return;
                   updateProgress.mutate({
                     taskId: task.task_id,
                     progress_percentage: Number(e.currentTarget.value),
-                  })
-                }
-                className="w-full accent-[var(--accent-primary)] cursor-pointer"
+                  });
+                }}
+                className="w-full accent-[var(--accent-primary)] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Task progress percentage"
               />
             </div>
@@ -307,37 +361,58 @@ export function TaskInspector() {
 
               <div className="pt-4 text-[13px] text-ink-secondary">
                 {activeTab === "work" && (
-                  <p className="text-[12px] text-ink-muted">
-                    Subtasks, Notes (+ Version History), and Attachments will
-                    mount in this tab.
-                  </p>
+                  <div className="space-y-6">
+                    <SubtaskList
+                      taskId={task.task_id}
+                      canEdit={Boolean(permissions?.canManageSubtasksAndNotes)}
+                    />
+                    <NoteList
+                      taskId={task.task_id}
+                      canEdit={Boolean(permissions?.canManageSubtasksAndNotes)}
+                    />
+                    <AttachmentPanel
+                      taskId={task.task_id}
+                      canEdit={Boolean(permissions?.canManageSubtasksAndNotes)}
+                    />
+                  </div>
                 )}
                 {activeTab === "discuss" && (
-                  <p className="text-[12px] text-ink-muted">
-                    Comments thread, Voting bar, and Task Sharing RBAC will
-                    mount in this tab.
-                  </p>
+                  <CommentThread
+                    taskId={task.task_id}
+                    taskOwnerId={task.user_id}
+                    currentUserId={me?.user_id}
+                    canComment={Boolean(permissions?.canComment)}
+                  />
                 )}
                 {activeTab === "context" && (
-                  <p className="text-[12px] text-ink-muted">
-                    Reminders, Recurrence rules, Locations, and External
-                    Integrations will mount in this tab.
-                  </p>
+                  <div className="space-y-6">
+                    <SchedulingPanel
+                      taskId={task.task_id}
+                      canEdit={Boolean(permissions?.canEditTask)}
+                    />
+                    <LocationPanel
+                      taskId={task.task_id}
+                      canEdit={Boolean(permissions?.canEditTask)}
+                    />
+                  </div>
                 )}
                 {activeTab === "history" && (
-                  <div className="space-y-1.5 text-[12px] text-ink-muted">
-                    <p>
-                      Created:{" "}
-                      <span className="font-mono text-ink-secondary">
-                        {formatDateTime(task.created_at)}
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-4 rounded-[6px] border border-hairline bg-canvas px-3 py-2 text-[11px] text-ink-muted">
+                      <span>
+                        Created:{" "}
+                        <span className="font-mono text-ink-secondary tabular-nums">
+                          {formatDateTime(task.created_at)}
+                        </span>
                       </span>
-                    </p>
-                    <p>
-                      Updated:{" "}
-                      <span className="font-mono text-ink-secondary">
-                        {formatDateTime(task.updated_at)}
+                      <span>
+                        Updated:{" "}
+                        <span className="font-mono text-ink-secondary tabular-nums">
+                          {formatDateTime(task.updated_at)}
+                        </span>
                       </span>
-                    </p>
+                    </div>
+                    <AuditTimeline taskId={task.task_id} />
                   </div>
                 )}
               </div>

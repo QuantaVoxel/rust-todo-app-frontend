@@ -21,7 +21,11 @@ export const metadata: Metadata = {
     "Fast, calm, keyboard-first task management powered by Next.js 16 and Rust Salvo.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="en"
