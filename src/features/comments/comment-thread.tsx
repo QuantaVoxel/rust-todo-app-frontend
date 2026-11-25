@@ -2,19 +2,27 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow, parseISO } from "date-fns";
 import { Pencil, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, ApiClientError } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type { CommentResponse } from "@/lib/api/types";
-import { formatDateTime } from "@/lib/utils/format";
 import { canDeleteComment, canEditComment } from "@/lib/utils/permissions";
 import { useUserDirectory } from "@/features/tasks/queries";
 
 export const commentKeys = {
   list: (taskId: number) => ["tasks", taskId, "comments"] as const,
 };
+
+function formatRelative(iso: string): string {
+  try {
+    return formatDistanceToNow(parseISO(iso), { addSuffix: true });
+  } catch {
+    return iso;
+  }
+}
 
 export function CommentThread({
   taskId,
@@ -77,8 +85,7 @@ export function CommentThread({
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitNew = () => {
     const trimmed = newComment.trim();
     if (!trimmed) {
       setFormError("Comment cannot be empty.");
@@ -89,22 +96,11 @@ export function CommentThread({
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[12px] font-semibold text-ink-secondary">
-          Comments
-        </h3>
-        {comments.length > 0 && (
-          <span className="font-mono text-[11px] text-ink-muted tabular-nums">
-            {comments.length}
-          </span>
-        )}
-      </div>
-
       {isLoading ? (
         <Skeleton className="h-20 w-full" />
       ) : comments.length === 0 ? (
-        <p className="rounded-[6px] border border-hairline bg-canvas px-3 py-2.5 text-[12px] text-ink-muted">
-          No comments yet.
+        <p className="rounded-[6px] border border-hairline bg-canvas px-3 py-3 text-[12px] text-ink-muted">
+          No comments yet. Start the discussion below.
         </p>
       ) : (
         <div className="space-y-2">
@@ -116,6 +112,9 @@ export function CommentThread({
               currentUserId
             );
             const isEditing = editingId === c.comment_id;
+            const user = userMap.get(c.user_id);
+            const username = user ? `@${user.username}` : `User #${c.user_id}`;
+            const initials = (user?.username ?? "U").slice(0, 2).toUpperCase();
 
             return (
               <div
@@ -123,14 +122,16 @@ export function CommentThread({
                 className="rounded-[6px] border border-hairline bg-canvas p-3 space-y-1.5"
               >
                 <div className="flex items-center justify-between text-[11px] text-ink-muted">
-                  <span className="font-medium text-ink-secondary">
-                    {(() => {
-                      const u = userMap.get(c.user_id);
-                      return u ? `@${u.username}` : `User #${c.user_id}`;
-                    })()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full border border-hairline bg-surface font-mono text-[9px] font-semibold text-ink-primary">
+                      {initials}
+                    </span>
+                    <span className="font-medium text-ink-secondary">
+                      {username}
+                    </span>
+                  </div>
                   <span className="font-mono tabular-nums">
-                    {formatDateTime(c.created_at)}
+                    {formatRelative(c.created_at)}
                   </span>
                 </div>
 
@@ -168,7 +169,7 @@ export function CommentThread({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2 pl-7">
                     <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-primary">
                       {c.comment}
                     </p>
@@ -208,16 +209,31 @@ export function CommentThread({
       )}
 
       {canComment ? (
-        <form onSubmit={handleSubmit} className="space-y-2">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitNew();
+          }}
+          className="space-y-2"
+        >
           <textarea
             rows={2}
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Write a comment..."
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                submitNew();
+              }
+            }}
+            placeholder="Write a comment... (⌘+Enter to post)"
             className="w-full rounded-[6px] border border-hairline bg-canvas px-3 py-2 text-[13px] text-ink-primary placeholder:text-ink-muted focus:border-strong focus:bg-surface focus-ring"
           />
           {formError && <p className="text-[12px] text-danger">{formError}</p>}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-ink-muted">
+              ⌘+Enter to send
+            </span>
             <Button
               type="submit"
               variant="primary"
