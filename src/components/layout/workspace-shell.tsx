@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Menu } from "lucide-react";
+import { RealtimeProvider } from "@/features/notifications/realtime-provider";
 import { CommandPalette } from "./command-palette";
 import { Sidebar } from "./sidebar";
 
@@ -9,7 +10,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-canvas text-ink-primary">
+    <RealtimeProvider>
+      <div className="flex h-screen w-full overflow-hidden bg-canvas text-ink-primary">
       {/* Desktop Sidebar Rail */}
       <div className="hidden lg:block h-full">
         <Sidebar />
@@ -50,5 +52,6 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       </main>
       <CommandPalette />
     </div>
+    </RealtimeProvider>
   );
 }

@@ -23,8 +23,17 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
-import type { UserSettingResponse } from "@/lib/api/types";
+import type {
+  UserConnectionResponse,
+  UserSettingResponse,
+} from "@/lib/api/types";
 import { cn } from "@/lib/utils/cn";
+import { useCurrentUser } from "@/features/tasks/queries";
+import {
+  NotificationBell,
+  useUnreadCount,
+} from "@/features/notifications/notification-center";
+import { useRealtime } from "@/features/notifications/realtime-provider";
 import { useWorkspaceStore, type SmartView } from "@/stores/workspace-store";
 
 interface NavItemProps {
@@ -77,6 +86,19 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { status: realtimeStatus } = useRealtime();
+  const { data: unreadData } = useUnreadCount();
+  const { data: me } = useCurrentUser();
+  const { data: pendingConnections = [] } = useQuery({
+    queryKey: ["connections", "pending"],
+    queryFn: () =>
+      apiFetch<UserConnectionResponse[]>(endpoints.connections("pending")),
+    staleTime: 30 * 1000,
+  });
+  const pendingIncomingCount = pendingConnections.filter(
+    (c) => me && c.user_id_2 === me.user_id
+  ).length;
+  const unreadCount = unreadData?.unread_count ?? 0;
   const smartView = useWorkspaceStore((s) => s.smartView);
   const setSmartView = useWorkspaceStore((s) => s.setSmartView);
   const setCommandPaletteOpen = useWorkspaceStore(
@@ -135,16 +157,19 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
             Todo Workspace
           </span>
         </div>
-        {onCloseMobile && (
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            aria-label="Close navigation"
-            className="rounded-[6px] p-1 text-ink-muted hover:bg-subtle hover:text-ink-primary lg:hidden"
-          >
-            <X className="h-4 w-4" strokeWidth={1.75} />
-          </button>
-        )}
+        <div className="flex items-center gap-1.5">
+          <NotificationBell />
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              aria-label="Close navigation"
+              className="rounded-[6px] p-1 text-ink-muted hover:bg-subtle hover:text-ink-primary lg:hidden"
+            >
+              <X className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Quick Command Search */}
@@ -215,6 +240,7 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
               label="Connections"
               href="/connections"
               active={pathname.startsWith("/connections")}
+              badge={pendingIncomingCount}
               icon={<Users className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
               onClick={onCloseMobile}
             />
@@ -222,6 +248,7 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
               label="Notifications"
               href="/notifications"
               active={pathname.startsWith("/notifications")}
+              badge={unreadCount}
               icon={<Bell className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
               onClick={onCloseMobile}
             />
@@ -240,8 +267,23 @@ export function Sidebar({ onCloseMobile }: { onCloseMobile?: () => void }) {
       <div className="mt-3 space-y-1 border-t border-hairline pt-2.5">
         <div className="flex items-center justify-between px-2.5 py-1 text-[11px] text-ink-muted">
           <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            <span>API Ready</span>
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                realtimeStatus === "ws" || realtimeStatus === "sse"
+                  ? "bg-success"
+                  : "bg-warning"
+              )}
+            />
+            <span>
+              {realtimeStatus === "ws"
+                ? "Live (WS)"
+                : realtimeStatus === "sse"
+                  ? "Live (SSE)"
+                  : realtimeStatus === "reconnecting"
+                    ? "Reconnecting"
+                    : "Connecting"}
+            </span>
           </span>
           <button
             type="button"

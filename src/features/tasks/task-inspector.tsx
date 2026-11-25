@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuditTimeline } from "@/features/audit/audit-timeline";
 import { AttachmentPanel } from "@/features/attachments/attachment-panel";
+import { SharePanel } from "@/features/collaboration/share-panel";
+import { VoteBar } from "@/features/collaboration/vote-bar";
 import { CommentThread } from "@/features/comments/comment-thread";
+import { IntegrationPanel } from "@/features/context/integration-panel";
 import { LocationPanel } from "@/features/context/location-panel";
 import { NoteList } from "@/features/notes/note-list";
 import { SchedulingPanel } from "@/features/scheduling/scheduling-panel";
@@ -377,12 +380,19 @@ export function TaskInspector() {
                   </div>
                 )}
                 {activeTab === "discuss" && (
-                  <CommentThread
-                    taskId={task.task_id}
-                    taskOwnerId={task.user_id}
-                    currentUserId={me?.user_id}
-                    canComment={Boolean(permissions?.canComment)}
-                  />
+                  <div className="space-y-6">
+                    <VoteBar taskId={task.task_id} />
+                    <SharePanel
+                      taskId={task.task_id}
+                      canManage={Boolean(permissions?.canManageSharing)}
+                    />
+                    <CommentThread
+                      taskId={task.task_id}
+                      taskOwnerId={task.user_id}
+                      currentUserId={me?.user_id}
+                      canComment={Boolean(permissions?.canComment)}
+                    />
+                  </div>
                 )}
                 {activeTab === "context" && (
                   <div className="space-y-6">
@@ -391,6 +401,10 @@ export function TaskInspector() {
                       canEdit={Boolean(permissions?.canEditTask)}
                     />
                     <LocationPanel
+                      taskId={task.task_id}
+                      canEdit={Boolean(permissions?.canEditTask)}
+                    />
+                    <IntegrationPanel
                       taskId={task.task_id}
                       canEdit={Boolean(permissions?.canEditTask)}
                     />

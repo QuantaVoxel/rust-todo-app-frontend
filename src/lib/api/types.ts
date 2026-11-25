@@ -412,8 +412,8 @@ export interface LabelHistoryEntry {
 
 export interface UserConnectionResponse {
   connection_id: number;
-  user_id: number;
-  target_user_id: number;
+  user_id_1: number;
+  user_id_2: number;
   status: string;
   created_at?: string;
 }
