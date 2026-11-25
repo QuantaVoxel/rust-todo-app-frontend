@@ -49,41 +49,41 @@ export function VoteBar({ taskId }: { taskId: number }) {
   };
 
   return (
-    <div className="flex items-center justify-between rounded-[8px] border border-hairline bg-canvas px-3 py-2">
-      <span className="text-[12px] font-medium text-ink-secondary">
-        Priority votes
-      </span>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => handleToggle("up")}
-          aria-label="Upvote task"
-          className={cn(
-            "inline-flex h-7 items-center gap-1 rounded-[6px] border px-2 font-mono text-[12px] tabular-nums transition-precision cursor-pointer",
-            myVote === "up"
-              ? "border-accent bg-accent-tint text-accent"
-              : "border-hairline bg-surface text-ink-secondary hover:text-ink-primary"
-          )}
-        >
-          <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} />
-          <span>{votes?.up ?? 0}</span>
-        </button>
+    <div
+      title="Priority votes"
+      className="inline-flex h-7 items-center overflow-hidden rounded-[6px] border border-hairline bg-canvas"
+    >
+      <button
+        type="button"
+        onClick={() => handleToggle("up")}
+        aria-label="Upvote task"
+        className={cn(
+          "inline-flex h-full items-center gap-1 px-2 font-mono text-[11px] tabular-nums transition-precision cursor-pointer focus-ring",
+          myVote === "up"
+            ? "bg-accent-tint text-accent font-semibold"
+            : "text-ink-secondary hover:bg-subtle hover:text-ink-primary"
+        )}
+      >
+        <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <span>{votes?.up ?? 0}</span>
+      </button>
 
-        <button
-          type="button"
-          onClick={() => handleToggle("down")}
-          aria-label="Downvote task"
-          className={cn(
-            "inline-flex h-7 items-center gap-1 rounded-[6px] border px-2 font-mono text-[12px] tabular-nums transition-precision cursor-pointer",
-            myVote === "down"
-              ? "border-danger bg-danger-tint text-danger"
-              : "border-hairline bg-surface text-ink-secondary hover:text-ink-primary"
-          )}
-        >
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-          <span>{votes?.down ?? 0}</span>
-        </button>
-      </div>
+      <span className="h-4 w-px bg-hairline" />
+
+      <button
+        type="button"
+        onClick={() => handleToggle("down")}
+        aria-label="Downvote task"
+        className={cn(
+          "inline-flex h-full items-center gap-1 px-2 font-mono text-[11px] tabular-nums transition-precision cursor-pointer focus-ring",
+          myVote === "down"
+            ? "bg-danger-tint text-danger font-semibold"
+            : "text-ink-secondary hover:bg-subtle hover:text-ink-primary"
+        )}
+      >
+        <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <span>{votes?.down ?? 0}</span>
+      </button>
     </div>
   );
 }

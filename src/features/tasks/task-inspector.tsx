@@ -3,14 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   Archive,
   ArchiveRestore,
   ArrowLeft,
   Maximize2,
-  MoreHorizontal,
+  Pencil,
   Trash2,
   X,
 } from "lucide-react";
@@ -145,59 +144,47 @@ export function TaskDetailView({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {task && <VoteBar taskId={task.task_id} />}
 
           {task && (permissions?.canArchive || permissions?.canDeleteTask) && (
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Task actions"
-                >
-                  <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  align="end"
-                  sideOffset={6}
-                  className="z-50 w-44 rounded-[8px] border border-hairline bg-surface p-1 text-[12px] text-ink-primary"
-                >
-                  {permissions.canArchive && (
-                    <DropdownMenu.Item
-                      onSelect={() =>
-                        archiveTask.mutate({
-                          taskId: task.task_id,
-                          archived: Boolean(task.archived_at),
-                        })
-                      }
-                      className="flex items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-ink-secondary hover:bg-subtle hover:text-ink-primary cursor-pointer focus:outline-none"
-                    >
-                      {task.archived_at ? (
-                        <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      ) : (
-                        <Archive className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      )}
-                      <span>
-                        {task.archived_at ? "Unarchive task" : "Archive task"}
-                      </span>
-                    </DropdownMenu.Item>
-                  )}
-                  {permissions.canDeleteTask && (
-                    <DropdownMenu.Item
-                      onSelect={() => setDeleteDialogOpen(true)}
-                      className="flex items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-danger hover:bg-danger-tint cursor-pointer focus:outline-none"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      <span>Delete task</span>
-                    </DropdownMenu.Item>
-                  )}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+            <div className="mx-1 h-4 w-px bg-hairline" />
+          )}
+
+          {task && permissions?.canArchive && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={task.archived_at ? "Unarchive task" : "Archive task"}
+              title={task.archived_at ? "Unarchive task" : "Archive task"}
+              onClick={() =>
+                archiveTask.mutate({
+                  taskId: task.task_id,
+                  archived: Boolean(task.archived_at),
+                })
+              }
+            >
+              {task.archived_at ? (
+                <ArchiveRestore className="h-4 w-4" strokeWidth={1.75} />
+              ) : (
+                <Archive className="h-4 w-4" strokeWidth={1.75} />
+              )}
+            </Button>
+          )}
+
+          {task && permissions?.canDeleteTask && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete task"
+              title="Delete task"
+              className="hover:text-danger"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+            </Button>
           )}
 
           {mode === "drawer" && (
@@ -243,23 +230,51 @@ export function TaskDetailView({
             {/* ZONA B — Core Execution Area */}
             <section className="space-y-5">
               <div className="space-y-2">
-                <input
-                  type="text"
-                  disabled={!permissions?.canEditTask}
-                  value={draftTitle ?? task.title}
-                  onChange={(e) => setDraftTitle(e.target.value)}
-                  onBlur={handleSaveTitle}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      (e.metaKey || e.ctrlKey || !e.shiftKey)
-                    ) {
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  aria-label="Task title"
-                  className="w-full rounded-[4px] bg-transparent px-1 -mx-1 text-[20px] font-semibold leading-[28px] tracking-[-0.02em] text-ink-primary focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-90"
-                />
+                <div className="group relative">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      disabled={!permissions?.canEditTask}
+                      value={draftTitle ?? task.title}
+                      title={
+                        permissions?.canEditTask
+                          ? "Click to edit title"
+                          : undefined
+                      }
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      onBlur={handleSaveTitle}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setDraftTitle(null);
+                          e.currentTarget.blur();
+                        } else if (
+                          e.key === "Enter" &&
+                          (e.metaKey || e.ctrlKey || !e.shiftKey)
+                        ) {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      aria-label="Task title"
+                      className={cn(
+                        "w-full rounded-[6px] border border-transparent bg-transparent px-2 -mx-2 py-1 pr-8 text-[20px] font-semibold leading-[28px] tracking-[-0.02em] text-ink-primary transition-precision focus:border-accent focus:bg-subtle focus:outline-none disabled:opacity-90",
+                        permissions?.canEditTask &&
+                          "hover:border-hairline hover:bg-subtle/60 cursor-text"
+                      )}
+                    />
+                    {permissions?.canEditTask && (
+                      <Pencil
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-2 top-2.5 h-3.5 w-3.5 text-ink-muted opacity-50 transition-precision group-hover:opacity-100 group-focus-within:opacity-0"
+                        strokeWidth={1.75}
+                      />
+                    )}
+                  </div>
+                  {draftTitle !== null && permissions?.canEditTask && (
+                    <p className="mt-1 font-mono text-[10px] text-ink-muted">
+                      Enter to save · Esc to cancel
+                    </p>
+                  )}
+                </div>
                 <textarea
                   rows={3}
                   disabled={!permissions?.canEditTask}
@@ -277,7 +292,11 @@ export function TaskDetailView({
                     }
                   }}
                   aria-label="Task description"
-                  className="w-full resize-none rounded-[6px] border border-transparent bg-transparent px-1 -mx-1 py-1 text-[13px] leading-relaxed text-ink-secondary placeholder:text-ink-muted focus:border-hairline focus:bg-subtle focus:outline-none disabled:opacity-90"
+                  className={cn(
+                    "w-full resize-none rounded-[6px] border border-transparent bg-transparent px-2 -mx-2 py-1.5 text-[13px] leading-relaxed text-ink-secondary placeholder:text-ink-muted transition-precision focus:border-hairline focus:bg-subtle focus:outline-none disabled:opacity-90",
+                    permissions?.canEditTask &&
+                      "hover:border-hairline hover:bg-subtle/50"
+                  )}
                 />
               </div>
 

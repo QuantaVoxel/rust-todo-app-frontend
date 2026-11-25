@@ -24,7 +24,7 @@ interface WorkspaceState {
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeTaskId: null,
-  viewMode: "list",
+  viewMode: "board",
   smartView: "all",
   sidebarCollapsed: false,
   commandPaletteOpen: false,
