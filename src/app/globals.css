@@ -1,26 +1,142 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   Swiss-Utilitarian Craft Design Tokens (Todo App v2)
+   Light Mode: Warm Paper | Dark Mode: Obsidian Ink
+   Single Disciplined Accent: Swiss Vermilion
+   ========================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-canvas: #f7f6f3;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f1efea;
+
+  --border-hairline: rgba(24, 24, 27, 0.08);
+  --border-strong: rgba(24, 24, 27, 0.16);
+
+  --ink-primary: #141416;
+  --ink-secondary: #52525b;
+  --ink-muted: #8a8a93;
+
+  --accent-primary: #d9481f;
+  --accent-primary-hover: #bf3b16;
+  --accent-primary-tint: rgba(217, 72, 31, 0.08);
+
+  /* Semantic Status & Priority */
+  --status-pending: #71717a;
+  --status-in-progress: #2563eb;
+  --status-completed: #16a34a;
+  --status-cancelled: #a1a1aa;
+
+  --priority-urgent: #dc2626;
+  --priority-high: #d97706;
+  --priority-medium: #2563eb;
+  --priority-low: #71717a;
+
+  --danger: #dc2626;
+  --danger-tint: rgba(220, 38, 38, 0.08);
+  --success: #16a34a;
+  --success-tint: rgba(22, 163, 74, 0.08);
+  --warning: #d97706;
+  --warning-tint: rgba(217, 119, 6, 0.08);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+}
+
+.dark {
+  --bg-canvas: #0f1012;
+  --bg-surface: #16171a;
+  --bg-subtle: #1e2024;
+
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --ink-primary: #f4f4f5;
+  --ink-secondary: #a1a1aa;
+  --ink-muted: #71717a;
+
+  --accent-primary: #ea5e36;
+  --accent-primary-hover: #f2744e;
+  --accent-primary-tint: rgba(234, 94, 54, 0.14);
+
+  --danger: #ef4444;
+  --danger-tint: rgba(239, 68, 68, 0.14);
+  --success: #22c55e;
+  --success-tint: rgba(34, 197, 94, 0.14);
+  --warning: #f59e0b;
+  --warning-tint: rgba(245, 158, 11, 0.14);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-subtle: var(--bg-subtle);
+  --color-hairline: var(--border-hairline);
+  --color-strong: var(--border-strong);
+
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+
+  --color-accent: var(--accent-primary);
+  --color-accent-hover: var(--accent-primary-hover);
+  --color-accent-tint: var(--accent-primary-tint);
+
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+
+  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-tech), ui-monospace, SFMono-Regular, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+* {
+  border-color: var(--border-hairline);
+}
+
+html,
+body {
+  background-color: var(--bg-canvas);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Precision transitions */
+.transition-precision {
+  transition-property: background-color, border-color, color, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Technical tabular numerals */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus ring using Swiss Vermilion */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Subtle structural skeleton pulse (0.4 -> 0.7) */
+@keyframes subtle-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.animate-skeleton {
+  animation: subtle-pulse 1.6s cubic-bezier(0.2, 0, 0, 1) infinite;
 }
